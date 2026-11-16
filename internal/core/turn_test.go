@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/rshun/agent-bot/internal/actions"
-	"github.com/rshun/agent-bot/internal/engine"
+	engpkg "github.com/rshun/agent-bot/internal/engine"
 	"github.com/rshun/agent-bot/internal/platform"
 )
 
@@ -93,12 +93,12 @@ func TestTokenEndsAfterTurn(t *testing.T) {
 	var mu sync.Mutex
 	var token string
 	var during int
-	engine.replyFor = func(opts engine.ReplyOptions) (engine.HeadlessResult, error) {
+	engine.replyFor = func(opts engpkg.ReplyOptions) (engpkg.HeadlessResult, error) {
 		mu.Lock()
 		token = tokenFrom(t, opts.Env)
 		mu.Unlock()
 		during = statusFor(t, ts, token)
-		return engine.HeadlessResult{Text: "pong", SessionID: opts.SessionID}, nil
+		return engpkg.HeadlessResult{Text: "pong", SessionID: opts.SessionID}, nil
 	}
 	sendChat(t, svc, "hello")
 	if during != http.StatusOK {
@@ -113,9 +113,9 @@ func TestTokenEndsAfterTurn(t *testing.T) {
 func TestTokenEndsAfterFailedTurn(t *testing.T) {
 	svc, engine, ts := actionsService(t)
 	var token string
-	engine.replyFor = func(opts engine.ReplyOptions) (engine.HeadlessResult, error) {
+	engine.replyFor = func(opts engpkg.ReplyOptions) (engpkg.HeadlessResult, error) {
 		token = tokenFrom(t, opts.Env)
-		return engine.HeadlessResult{}, &engine.RunError{Message: "boom"}
+		return engpkg.HeadlessResult{}, &engpkg.RunError{Message: "boom"}
 	}
 	sendChat(t, svc, "hello")
 	if token == "" {
@@ -130,12 +130,12 @@ func TestSessionRebuildTokensEnd(t *testing.T) {
 	svc, engine, ts := actionsService(t)
 	sendChat(t, svc, "first")
 	var tokens []string
-	engine.replyFor = func(opts engine.ReplyOptions) (engine.HeadlessResult, error) {
+	engine.replyFor = func(opts engpkg.ReplyOptions) (engpkg.HeadlessResult, error) {
 		tokens = append(tokens, tokenFrom(t, opts.Env))
 		if !opts.NewSession {
-			return engine.HeadlessResult{}, &engine.RunError{Message: "session not found"}
+			return engpkg.HeadlessResult{}, &engpkg.RunError{Message: "session not found"}
 		}
-		return engine.HeadlessResult{Text: "fresh", SessionID: opts.SessionID}, nil
+		return engpkg.HeadlessResult{Text: "fresh", SessionID: opts.SessionID}, nil
 	}
 	sendChat(t, svc, "second")
 	if len(tokens) != 2 || tokens[0] == "" || tokens[1] == "" {
@@ -151,12 +151,12 @@ func TestSessionRebuildTokensEnd(t *testing.T) {
 func TestTaskRunGetsToken(t *testing.T) {
 	svc, engine, ts := actionsService(t)
 	var token string
-	engine.replyFor = func(opts engine.ReplyOptions) (engine.HeadlessResult, error) {
+	engine.replyFor = func(opts engpkg.ReplyOptions) (engpkg.HeadlessResult, error) {
 		token = tokenFrom(t, opts.Env)
 		if !opts.Actions || opts.React {
 			t.Errorf("task options: actions=%v react=%v", opts.Actions, opts.React)
 		}
-		return engine.HeadlessResult{Text: "done", SessionID: opts.SessionID}, nil
+		return engpkg.HeadlessResult{Text: "done", SessionID: opts.SessionID}, nil
 	}
 	rec := &recorder{}
 	svc.Senders = map[string]platform.Replier{"telegram": capture{rec}}

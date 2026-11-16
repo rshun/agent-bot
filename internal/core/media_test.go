@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rshun/agent-bot/internal/engine"
+	engpkg "github.com/rshun/agent-bot/internal/engine"
 	"github.com/rshun/agent-bot/internal/media"
 	"github.com/rshun/agent-bot/internal/sandbox"
 )
@@ -81,7 +81,7 @@ func TestPronounceAndWebImageEndToEnd(t *testing.T) {
 
 	var pText, wText, unsafeText string
 	var pErr, wErr, unsafeErr bool
-	engine.replyFor = func(opts engine.ReplyOptions) (engine.HeadlessResult, error) {
+	engine.replyFor = func(opts engpkg.ReplyOptions) (engpkg.HeadlessResult, error) {
 		if !opts.Pronounce || !opts.SendWebImage || !opts.ImageGen {
 			t.Errorf("expected Pronounce/SendWebImage/ImageGen enabled, got pronounce=%v webImg=%v imgGen=%v", opts.Pronounce, opts.SendWebImage, opts.ImageGen)
 		}
@@ -98,7 +98,7 @@ func TestPronounceAndWebImageEndToEnd(t *testing.T) {
 			"name":      "send_web_image",
 			"arguments": map[string]string{"url": mediaSrv.URL + "/aurora.png", "caption": "色情裸照"},
 		})
-		return engine.HeadlessResult{Text: "serendipity 读作 /ˌsɛrənˈdɪpɪti/，附标准读音与图片。", SessionID: opts.SessionID}, nil
+		return engpkg.HeadlessResult{Text: "serendipity 读作 /ˌsɛrənˈdɪpɪti/，附标准读音与图片。", SessionID: opts.SessionID}, nil
 	}
 
 	ev := &progressEvents{}
@@ -156,8 +156,8 @@ func TestAutoCollectGeneratedImagesAndCleanLocalLinks(t *testing.T) {
 		},
 	}
 
-	engine.replyFor = func(opts engine.ReplyOptions) (engine.HeadlessResult, error) {
-		return engine.HeadlessResult{
+	engine.replyFor = func(opts engpkg.ReplyOptions) (engpkg.HeadlessResult, error) {
+		return engpkg.HeadlessResult{
 			Text:            "这是为你生成的雨夜手机壁纸 ![preview](images/1.jpg) 见 [images/1.jpg](images/1.jpg)",
 			SessionID:       opts.SessionID,
 			GeneratedImages: []string{sessImg},
@@ -206,11 +206,11 @@ func TestUnsafeMediaPreTurnAndStreamAndAuditorPlaceholder(t *testing.T) {
 	_ = os.MkdirAll(filepath.Dir(sessImg), 0o750)
 	_ = os.WriteFile(sessImg, testValidPNG(t, 300, 450), 0o600)
 
-	engine.replyFor = func(opts engine.ReplyOptions) (engine.HeadlessResult, error) {
+	engine.replyFor = func(opts engpkg.ReplyOptions) (engpkg.HeadlessResult, error) {
 		if opts.OnTool != nil {
 			opts.OnTool(toolUse("image_gen", `{"prompt":"explicit porn nude photo","aspect_ratio":"2:3"}`))
 		}
-		return engine.HeadlessResult{
+		return engpkg.HeadlessResult{
 			Text:            "done",
 			SessionID:       opts.SessionID,
 			GeneratedImages: []string{sessImg},
@@ -227,8 +227,8 @@ func TestUnsafeMediaPreTurnAndStreamAndAuditorPlaceholder(t *testing.T) {
 
 	// 3. Post-generation ImageAuditor hook placeholder verification.
 	svc.ImageAuditor = rejectAuditor{reason: "视觉终审拦截：检测到违规画面"}
-	engine.replyFor = func(opts engine.ReplyOptions) (engine.HeadlessResult, error) {
-		return engine.HeadlessResult{
+	engine.replyFor = func(opts engpkg.ReplyOptions) (engpkg.HeadlessResult, error) {
+		return engpkg.HeadlessResult{
 			Text:            "已生成图片。",
 			SessionID:       opts.SessionID,
 			GeneratedImages: []string{sessImg},

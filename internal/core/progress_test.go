@@ -11,13 +11,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rshun/agent-bot/internal/engine"
+	engpkg "github.com/rshun/agent-bot/internal/engine"
 	"github.com/rshun/agent-bot/internal/platform"
 	"github.com/rshun/agent-bot/internal/store"
 )
 
-func toolUse(name, input string) engine.ToolUse {
-	return engine.ToolUse{Name: name, Input: json.RawMessage(input)}
+func toolUse(name, input string) engpkg.ToolUse {
+	return engpkg.ToolUse{Name: name, Input: json.RawMessage(input)}
 }
 
 func TestProgressTextOneLine(t *testing.T) {
@@ -31,7 +31,7 @@ func TestProgressTextOneLine(t *testing.T) {
 	}
 
 	cases := []struct {
-		tu   engine.ToolUse
+		tu   engpkg.ToolUse
 		want string
 	}{
 		{toolUse("web_search", `{"query":"go news"}`), "正在搜索：go news"},
@@ -180,12 +180,12 @@ func handleHello(svc *Service, out platform.Replier, text string) {
 
 func TestChatUsesProgressMessage(t *testing.T) {
 	svc, engine := progressService(t)
-	engine.replyFor = func(opts engine.ReplyOptions) (engine.HeadlessResult, error) {
+	engine.replyFor = func(opts engpkg.ReplyOptions) (engpkg.HeadlessResult, error) {
 		if opts.OnTool == nil {
-			return engine.HeadlessResult{}, errors.New("no OnTool")
+			return engpkg.HeadlessResult{}, errors.New("no OnTool")
 		}
 		opts.OnTool(toolUse("web_search", `{"query":"go news"}`))
-		return engine.HeadlessResult{Text: "pong", SessionID: opts.SessionID}, nil
+		return engpkg.HeadlessResult{Text: "pong", SessionID: opts.SessionID}, nil
 	}
 	ev := &progressEvents{}
 	handleHello(svc, fakeProgressOut{ev: ev}, "hello")
@@ -203,12 +203,12 @@ func TestChatPassesOnToolOnResumedSession(t *testing.T) {
 	if err := svc.Store.SetSession(context.Background(), "telegram", "9", "old"); err != nil {
 		t.Fatal(err)
 	}
-	engine.replyFor = func(opts engine.ReplyOptions) (engine.HeadlessResult, error) {
+	engine.replyFor = func(opts engpkg.ReplyOptions) (engpkg.HeadlessResult, error) {
 		if opts.OnTool == nil {
-			return engine.HeadlessResult{}, errors.New("no OnTool")
+			return engpkg.HeadlessResult{}, errors.New("no OnTool")
 		}
 		opts.OnTool(toolUse("web_fetch", `{"url":"https://example.com"}`))
-		return engine.HeadlessResult{Text: "pong", SessionID: opts.SessionID}, nil
+		return engpkg.HeadlessResult{Text: "pong", SessionID: opts.SessionID}, nil
 	}
 	ev := &progressEvents{}
 	handleHello(svc, fakeProgressOut{ev: ev}, "hello")
@@ -232,13 +232,13 @@ func TestCommandHasNoProgress(t *testing.T) {
 
 func TestProgressShowsErrorOnFailure(t *testing.T) {
 	svc, engine := progressService(t)
-	engine.replyFor = func(engine.ReplyOptions) (engine.HeadlessResult, error) {
-		return engine.HeadlessResult{}, context.DeadlineExceeded
+	engine.replyFor = func(engpkg.ReplyOptions) (engpkg.HeadlessResult, error) {
+		return engpkg.HeadlessResult{}, context.DeadlineExceeded
 	}
 	ev := &progressEvents{}
 	handleHello(svc, fakeProgressOut{ev: ev}, "hello")
 	got := ev.waitFor(t, 3)
-	want := "finish:" + engine.UserFacing(context.DeadlineExceeded)
+	want := "finish:" + engpkg.UserFacing(context.DeadlineExceeded)
 	if got[2] != want {
 		t.Fatalf("%#v", got)
 	}
@@ -246,8 +246,8 @@ func TestProgressShowsErrorOnFailure(t *testing.T) {
 
 func TestProgressEmptyReplyFinishesWithFailure(t *testing.T) {
 	svc, engine := progressService(t)
-	engine.replyFor = func(opts engine.ReplyOptions) (engine.HeadlessResult, error) {
-		return engine.HeadlessResult{SessionID: opts.SessionID}, nil
+	engine.replyFor = func(opts engpkg.ReplyOptions) (engpkg.HeadlessResult, error) {
+		return engpkg.HeadlessResult{SessionID: opts.SessionID}, nil
 	}
 	ev := &progressEvents{}
 	handleHello(svc, fakeProgressOut{ev: ev}, "hello")
@@ -283,9 +283,9 @@ func TestProgressFinishFailureDoesNotResend(t *testing.T) {
 
 func TestProgressUpdateFailureStillFinishes(t *testing.T) {
 	svc, engine := progressService(t)
-	engine.replyFor = func(opts engine.ReplyOptions) (engine.HeadlessResult, error) {
+	engine.replyFor = func(opts engpkg.ReplyOptions) (engpkg.HeadlessResult, error) {
 		opts.OnTool(toolUse("web_search", `{"query":"x"}`))
-		return engine.HeadlessResult{Text: "pong", SessionID: opts.SessionID}, nil
+		return engpkg.HeadlessResult{Text: "pong", SessionID: opts.SessionID}, nil
 	}
 	ev := &progressEvents{}
 	handleHello(svc, fakeProgressOut{ev: ev, updErr: errors.New("synthetic update failure")}, "hello")

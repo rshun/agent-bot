@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rshun/agent-bot/internal/engine"
+	engpkg "github.com/rshun/agent-bot/internal/engine"
 	"github.com/rshun/agent-bot/internal/platform"
 )
 
@@ -233,11 +233,11 @@ func TestImagesResentWhenSessionIsRebuilt(t *testing.T) {
 	if err := svc.Store.SetSession(context.Background(), "telegram", "9", "old"); err != nil {
 		t.Fatal(err)
 	}
-	engine.replyFor = func(opts engine.ReplyOptions) (engine.HeadlessResult, error) {
+	engine.replyFor = func(opts engpkg.ReplyOptions) (engpkg.HeadlessResult, error) {
 		if !opts.NewSession {
-			return engine.HeadlessResult{}, errors.New("Session old not found")
+			return engpkg.HeadlessResult{}, errors.New("Session old not found")
 		}
-		return engine.HeadlessResult{Text: "pong", SessionID: opts.SessionID}, nil
+		return engpkg.HeadlessResult{Text: "pong", SessionID: opts.SessionID}, nil
 	}
 	rec := &recorder{}
 	var l loaded

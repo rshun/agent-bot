@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rshun/agent-bot/internal/engine"
+	engpkg "github.com/rshun/agent-bot/internal/engine"
 	"github.com/rshun/agent-bot/internal/platform"
 	"github.com/rshun/agent-bot/internal/schedule"
 	"github.com/rshun/agent-bot/internal/store"
@@ -29,11 +29,11 @@ func taskService(t *testing.T, structured string) (*Service, *fakeEngine, *recor
 	svc.Now = func() time.Time { return taskNow }
 	sent := &recorder{}
 	svc.Senders = map[string]platform.Replier{"telegram": capture{sent}}
-	engine.replyFor = func(opts engine.ReplyOptions) (engine.HeadlessResult, error) {
+	engine.replyFor = func(opts engpkg.ReplyOptions) (engpkg.HeadlessResult, error) {
 		if opts.JSONSchema != "" {
-			return engine.HeadlessResult{SessionID: opts.SessionID, Structured: json.RawMessage(structured)}, nil
+			return engpkg.HeadlessResult{SessionID: opts.SessionID, Structured: json.RawMessage(structured)}, nil
 		}
-		return engine.HeadlessResult{Text: "今天的新闻", SessionID: opts.SessionID}, nil
+		return engpkg.HeadlessResult{Text: "今天的新闻", SessionID: opts.SessionID}, nil
 	}
 	return svc, engine, sent
 }
@@ -288,8 +288,8 @@ func TestTaskEmptyAnswerSuppressesAndErrorReportsFailure(t *testing.T) {
 	svc, engine, sent := taskService(t, dailyNews)
 
 	// 1. runErr == nil with empty/whitespace text and no attachments -> silently suppressed, NextRun advances.
-	engine.replyFor = func(opts engine.ReplyOptions) (engine.HeadlessResult, error) {
-		return engine.HeadlessResult{Text: "  \n", SessionID: opts.SessionID}, nil
+	engine.replyFor = func(opts engpkg.ReplyOptions) (engpkg.HeadlessResult, error) {
+		return engpkg.HeadlessResult{Text: "  \n", SessionID: opts.SessionID}, nil
 	}
 	id := addTask(t, svc, "9", dailyNews, "每天 09:00：看新闻", time.Date(2026, 10, 19, 9, 0, 0, 0, taskZone))
 	svc.Now = func() time.Time { return time.Date(2026, 10, 19, 9, 0, 0, 0, taskZone) }
@@ -307,8 +307,8 @@ func TestTaskEmptyAnswerSuppressesAndErrorReportsFailure(t *testing.T) {
 	}
 
 	// 2. runErr != nil -> pushes failure alert normally.
-	engine.replyFor = func(opts engine.ReplyOptions) (engine.HeadlessResult, error) {
-		return engine.HeadlessResult{}, &engine.RunError{Message: "upstream timeout"}
+	engine.replyFor = func(opts engpkg.ReplyOptions) (engpkg.HeadlessResult, error) {
+		return engpkg.HeadlessResult{}, &engpkg.RunError{Message: "upstream timeout"}
 	}
 	svc.Now = func() time.Time { return time.Date(2026, 10, 20, 9, 0, 0, 0, taskZone) }
 	if err := svc.RunTaskByID(ctx, id); err != nil {
@@ -329,11 +329,11 @@ func TestTaskNaturalLanguageSkipPauseResumeDelete(t *testing.T) {
 	setStructured := func(raw string) {
 		engine.mu.Lock()
 		defer engine.mu.Unlock()
-		engine.replyFor = func(opts engine.ReplyOptions) (engine.HeadlessResult, error) {
+		engine.replyFor = func(opts engpkg.ReplyOptions) (engpkg.HeadlessResult, error) {
 			if opts.JSONSchema != "" {
-				return engine.HeadlessResult{SessionID: opts.SessionID, Structured: json.RawMessage(raw)}, nil
+				return engpkg.HeadlessResult{SessionID: opts.SessionID, Structured: json.RawMessage(raw)}, nil
 			}
-			return engine.HeadlessResult{Text: "今天的新闻", SessionID: opts.SessionID}, nil
+			return engpkg.HeadlessResult{Text: "今天的新闻", SessionID: opts.SessionID}, nil
 		}
 	}
 
@@ -401,11 +401,11 @@ func TestNaturalChatWithoutTaskCommand(t *testing.T) {
 	setStructured := func(raw string) {
 		engine.mu.Lock()
 		defer engine.mu.Unlock()
-		engine.replyFor = func(opts engine.ReplyOptions) (engine.HeadlessResult, error) {
+		engine.replyFor = func(opts engpkg.ReplyOptions) (engpkg.HeadlessResult, error) {
 			if opts.JSONSchema != "" {
-				return engine.HeadlessResult{SessionID: opts.SessionID, Structured: json.RawMessage(raw)}, nil
+				return engpkg.HeadlessResult{SessionID: opts.SessionID, Structured: json.RawMessage(raw)}, nil
 			}
-			return engine.HeadlessResult{Text: "普通聊天回复", SessionID: opts.SessionID}, nil
+			return engpkg.HeadlessResult{Text: "普通聊天回复", SessionID: opts.SessionID}, nil
 		}
 	}
 
@@ -515,11 +515,11 @@ func TestTaskRunNowAndUpdateSchedule(t *testing.T) {
 	setStructured := func(raw string) {
 		engine.mu.Lock()
 		defer engine.mu.Unlock()
-		engine.replyFor = func(opts engine.ReplyOptions) (engine.HeadlessResult, error) {
+		engine.replyFor = func(opts engpkg.ReplyOptions) (engpkg.HeadlessResult, error) {
 			if opts.JSONSchema != "" {
-				return engine.HeadlessResult{SessionID: opts.SessionID, Structured: json.RawMessage(raw)}, nil
+				return engpkg.HeadlessResult{SessionID: opts.SessionID, Structured: json.RawMessage(raw)}, nil
 			}
-			return engine.HeadlessResult{Text: "立即试跑结果", SessionID: opts.SessionID}, nil
+			return engpkg.HeadlessResult{Text: "立即试跑结果", SessionID: opts.SessionID}, nil
 		}
 	}
 
@@ -560,12 +560,12 @@ func TestTaskRunNowAndUpdateSchedule(t *testing.T) {
 	// 4. Conversational question about tasks falls back via action="none" and injects task list context into chat
 	var chatPrompt string
 	engine.mu.Lock()
-	engine.replyFor = func(opts engine.ReplyOptions) (engine.HeadlessResult, error) {
+	engine.replyFor = func(opts engpkg.ReplyOptions) (engpkg.HeadlessResult, error) {
 		if opts.JSONSchema != "" {
-			return engine.HeadlessResult{SessionID: opts.SessionID, Structured: json.RawMessage(`{"action":"none"}`)}, nil
+			return engpkg.HeadlessResult{SessionID: opts.SessionID, Structured: json.RawMessage(`{"action":"none"}`)}, nil
 		}
 		chatPrompt = opts.Prompt
-		return engine.HeadlessResult{Text: "普通对话回复", SessionID: opts.SessionID}, nil
+		return engpkg.HeadlessResult{Text: "普通对话回复", SessionID: opts.SessionID}, nil
 	}
 	engine.mu.Unlock()
 	say(svc, rec, "帮我看看任务2每次具体执行什么提示词？")
@@ -727,14 +727,14 @@ func TestSinglePlatformAndDefaultAllPlatformDelivery(t *testing.T) {
 
 	// 8. Natural-language platform-only update (without changing schedule) works cleanly.
 	engine.mu.Lock()
-	engine.replyFor = func(opts engine.ReplyOptions) (engine.HeadlessResult, error) {
+	engine.replyFor = func(opts engpkg.ReplyOptions) (engpkg.HeadlessResult, error) {
 		if opts.JSONSchema != "" {
-			return engine.HeadlessResult{
+			return engpkg.HeadlessResult{
 				SessionID:  opts.SessionID,
 				Structured: json.RawMessage(`{"action":"update","task_id":2,"kind":"","at":"","time":"","times":[],"weekdays":[],"month_days":[],"every_minutes":0,"date_file":"","cron":"","target_platform":"all","prompt":"","summary":"","error":""}`),
 			}, nil
 		}
-		return engine.HeadlessResult{Text: "新闻", SessionID: opts.SessionID}, nil
+		return engpkg.HeadlessResult{Text: "新闻", SessionID: opts.SessionID}, nil
 	}
 	engine.mu.Unlock()
 	say(svc, cmdReply, "把任务2改成全平台推送")
@@ -767,9 +767,9 @@ func TestTaskNoReplySuppressesScheduledPush(t *testing.T) {
 
 	// 1. Scheduled run returning [[NO_REPLY]] passes ScheduledTask=true, suppresses push on both TG & Discord, and advances NextRun.
 	var sawScheduledOpt bool
-	engine.replyFor = func(opts engine.ReplyOptions) (engine.HeadlessResult, error) {
+	engine.replyFor = func(opts engpkg.ReplyOptions) (engpkg.HeadlessResult, error) {
 		sawScheduledOpt = opts.ScheduledTask
-		return engine.HeadlessResult{Text: "  [[NO_REPLY]]\n", SessionID: opts.SessionID}, nil
+		return engpkg.HeadlessResult{Text: "  [[NO_REPLY]]\n", SessionID: opts.SessionID}, nil
 	}
 	svc.Now = func() time.Time { return time.Date(2026, 10, 19, 9, 0, 0, 0, taskZone) }
 	if err := svc.RunTaskByID(ctx, id); err != nil {
@@ -806,8 +806,8 @@ func TestTaskNoReplySuppressesScheduledPush(t *testing.T) {
 	dcRec.mu.Unlock()
 
 	// 3. Normal output on next scheduled run pushes to both TG & Discord.
-	engine.replyFor = func(opts engine.ReplyOptions) (engine.HeadlessResult, error) {
-		return engine.HeadlessResult{Text: "发现异常：队列积压", SessionID: opts.SessionID}, nil
+	engine.replyFor = func(opts engpkg.ReplyOptions) (engpkg.HeadlessResult, error) {
+		return engpkg.HeadlessResult{Text: "发现异常：队列积压", SessionID: opts.SessionID}, nil
 	}
 	svc.Now = func() time.Time { return time.Date(2026, 10, 20, 9, 0, 0, 0, taskZone) }
 	if err := svc.RunTaskByID(ctx, id); err != nil {

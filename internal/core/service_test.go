@@ -9,24 +9,24 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rshun/agent-bot/internal/engine"
+	engpkg "github.com/rshun/agent-bot/internal/engine"
 	"github.com/rshun/agent-bot/internal/platform"
 	"github.com/rshun/agent-bot/internal/store"
 )
 
 type fakeEngine struct {
 	mu       sync.Mutex
-	calls    []engine.ReplyOptions
+	calls    []engpkg.ReplyOptions
 	block    chan struct{}
-	replyFor func(engine.ReplyOptions) (engine.HeadlessResult, error)
+	replyFor func(engpkg.ReplyOptions) (engpkg.HeadlessResult, error)
 }
 
-func (f *fakeEngine) Reply(ctx context.Context, opts engine.ReplyOptions) (engine.HeadlessResult, error) {
+func (f *fakeEngine) Reply(ctx context.Context, opts engpkg.ReplyOptions) (engpkg.HeadlessResult, error) {
 	if f.block != nil {
 		select {
 		case <-f.block:
 		case <-ctx.Done():
-			return engine.HeadlessResult{}, ctx.Err()
+			return engpkg.HeadlessResult{}, ctx.Err()
 		}
 	}
 	f.mu.Lock()
@@ -35,15 +35,15 @@ func (f *fakeEngine) Reply(ctx context.Context, opts engine.ReplyOptions) (engin
 	if f.replyFor != nil {
 		return f.replyFor(opts)
 	}
-	return engine.HeadlessResult{Text: "pong", SessionID: opts.SessionID}, nil
+	return engpkg.HeadlessResult{Text: "pong", SessionID: opts.SessionID}, nil
 }
 
-func (f *fakeEngine) Models(context.Context) (engine.ModelList, error) {
-	return engine.ModelList{Default: "gpt-5.4", Names: []string{"gpt-5.4", "gpt-5.3-codex"}}, nil
+func (f *fakeEngine) Models(context.Context) (engpkg.ModelList, error) {
+	return engpkg.ModelList{Default: "gpt-5.4", Names: []string{"gpt-5.4", "gpt-5.3-codex"}}, nil
 }
 
-func (f *fakeEngine) Allowance(context.Context) (engine.Allowance, error) {
-	return engine.Allowance{Tier: "CodexPro", UsedPercent: 2, HasUsedPercent: true, PeriodKind: "USAGE_PERIOD_TYPE_WEEKLY"}, nil
+func (f *fakeEngine) Allowance(context.Context) (engpkg.Allowance, error) {
+	return engpkg.Allowance{Tier: "CodexPro", UsedPercent: 2, HasUsedPercent: true, PeriodKind: "USAGE_PERIOD_TYPE_WEEKLY"}, nil
 }
 
 type recorder struct {
@@ -107,11 +107,11 @@ func (r *recorder) receiptCount() int {
 func TestReceiptThenResult(t *testing.T) {
 	svc, engine := testService(t)
 	rec := &recorder{}
-	engine.replyFor = func(opts engine.ReplyOptions) (engine.HeadlessResult, error) {
+	engine.replyFor = func(opts engpkg.ReplyOptions) (engpkg.HeadlessResult, error) {
 		if rec.receiptCount() != 1 {
-			return engine.HeadlessResult{}, errors.New("reply started before receipt")
+			return engpkg.HeadlessResult{}, errors.New("reply started before receipt")
 		}
-		return engine.HeadlessResult{Text: "pong", SessionID: opts.SessionID}, nil
+		return engpkg.HeadlessResult{Text: "pong", SessionID: opts.SessionID}, nil
 	}
 	svc.Handle(context.Background(), platform.Inbound{
 		Platform: "telegram", ChatID: "9", UserID: "1", Text: "hello", TextMessage: true,
@@ -201,8 +201,8 @@ func TestUsageQuotaAndModel(t *testing.T) {
 	// Verify that when a chat turn returns Usage tokens, /usage includes the last turn token snapshot.
 	inTok := int64(1200)
 	outTok := int64(340)
-	engine.replyFor = func(opts engine.ReplyOptions) (engine.HeadlessResult, error) {
-		return engine.HeadlessResult{
+	engine.replyFor = func(opts engpkg.ReplyOptions) (engpkg.HeadlessResult, error) {
+		return engpkg.HeadlessResult{
 			Text:      "pong",
 			SessionID: opts.SessionID,
 			Usage: &store.UsageTokens{
@@ -295,11 +295,11 @@ func TestChatPassesWebSearchIncludingRebuild(t *testing.T) {
 	if err := svc.Store.SetSession(context.Background(), "telegram", "9", "old"); err != nil {
 		t.Fatal(err)
 	}
-	engine.replyFor = func(opts engine.ReplyOptions) (engine.HeadlessResult, error) {
+	engine.replyFor = func(opts engpkg.ReplyOptions) (engpkg.HeadlessResult, error) {
 		if !opts.NewSession {
-			return engine.HeadlessResult{}, errors.New("Session old not found")
+			return engpkg.HeadlessResult{}, errors.New("Session old not found")
 		}
-		return engine.HeadlessResult{Text: "pong", SessionID: opts.SessionID}, nil
+		return engpkg.HeadlessResult{Text: "pong", SessionID: opts.SessionID}, nil
 	}
 	rec := &recorder{}
 	svc.Handle(context.Background(), platform.Inbound{

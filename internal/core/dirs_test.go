@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/rshun/agent-bot/internal/engine"
+	engpkg "github.com/rshun/agent-bot/internal/engine"
 	"github.com/rshun/agent-bot/internal/platform"
 	"github.com/rshun/agent-bot/internal/sandbox"
 )
@@ -119,17 +119,17 @@ func TestMissingOldSessionRebuildsWithSandbox(t *testing.T) {
 	if err := svc.Store.SetSession(ctx, "telegram", "9", "old"); err != nil {
 		t.Fatal(err)
 	}
-	engine.replyFor = func(opts engine.ReplyOptions) (engine.HeadlessResult, error) {
+	engine.replyFor = func(opts engpkg.ReplyOptions) (engpkg.HeadlessResult, error) {
 		if !opts.NewSession {
-			return engine.HeadlessResult{}, errors.New("Session old not found")
+			return engpkg.HeadlessResult{}, errors.New("Session old not found")
 		}
-		return engine.HeadlessResult{Text: "pong", SessionID: opts.SessionID}, nil
+		return engpkg.HeadlessResult{Text: "pong", SessionID: opts.SessionID}, nil
 	}
 	rec := &recorder{}
 	say(svc, rec, "hello")
 	rec.wait(t, 1)
 	engine.mu.Lock()
-	calls := append([]engine.ReplyOptions(nil), engine.calls...)
+	calls := append([]engpkg.ReplyOptions(nil), engine.calls...)
 	engine.mu.Unlock()
 	if len(calls) != 2 || !calls[1].NewSession || calls[1].Sandbox != sandbox.ProfileName || !calls[1].FileTools {
 		t.Fatalf("%#v", calls)
@@ -343,8 +343,8 @@ func TestNoBwrapGrantSucceeds(t *testing.T) {
 
 func TestEmptyReplyWithGrantStillReportsFailure(t *testing.T) {
 	svc, engine, _ := sandboxService(t)
-	engine.replyFor = func(opts engine.ReplyOptions) (engine.HeadlessResult, error) {
-		return engine.HeadlessResult{SessionID: opts.SessionID}, nil
+	engine.replyFor = func(opts engpkg.ReplyOptions) (engpkg.HeadlessResult, error) {
+		return engpkg.HeadlessResult{SessionID: opts.SessionID}, nil
 	}
 	dir, real := realDir(t)
 	rec := &recorder{}

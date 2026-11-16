@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/rshun/agent-bot/internal/actions"
-	"github.com/rshun/agent-bot/internal/engine"
+	engpkg "github.com/rshun/agent-bot/internal/engine"
 	"github.com/rshun/agent-bot/internal/platform"
 )
 
@@ -82,12 +82,12 @@ func callReact(t *testing.T, ts *httptest.Server, token, emoji string) (text str
 // reactThenReply makes the fake engine react once and answer with text.
 func reactThenReply(t *testing.T, engine *fakeEngine, ts *httptest.Server, emoji, text string) {
 	t.Helper()
-	engine.replyFor = func(opts engine.ReplyOptions) (engine.HeadlessResult, error) {
+	engine.replyFor = func(opts engpkg.ReplyOptions) (engpkg.HeadlessResult, error) {
 		if !opts.React {
 			t.Error("react tool not offered")
 		}
 		callReact(t, ts, tokenFrom(t, opts.Env), emoji)
-		return engine.HeadlessResult{Text: text, SessionID: opts.SessionID}, nil
+		return engpkg.HeadlessResult{Text: text, SessionID: opts.SessionID}, nil
 	}
 }
 
@@ -209,8 +209,8 @@ func TestReactOnlyKeepsGrantNote(t *testing.T) {
 func TestNoReplyWithoutReactIsEmpty(t *testing.T) {
 	svc, engine, _ := actionsService(t)
 	svc.ProgressInterval = time.Nanosecond
-	engine.replyFor = func(opts engine.ReplyOptions) (engine.HeadlessResult, error) {
-		return engine.HeadlessResult{Text: noReply, SessionID: opts.SessionID}, nil
+	engine.replyFor = func(opts engpkg.ReplyOptions) (engpkg.HeadlessResult, error) {
+		return engpkg.HeadlessResult{Text: noReply, SessionID: opts.SessionID}, nil
 	}
 	ev := &progressEvents{}
 	handleMessage(svc, reactingOut{fakeProgressOut: fakeProgressOut{ev: ev}}, "你好")
@@ -225,9 +225,9 @@ func TestFailedReactWithMarkerIsEmpty(t *testing.T) {
 	svc, engine, ts := actionsService(t)
 	svc.ProgressInterval = time.Nanosecond
 	var result string
-	engine.replyFor = func(opts engine.ReplyOptions) (engine.HeadlessResult, error) {
+	engine.replyFor = func(opts engpkg.ReplyOptions) (engpkg.HeadlessResult, error) {
 		result, _ = callReact(t, ts, tokenFrom(t, opts.Env), "👍")
-		return engine.HeadlessResult{Text: noReply, SessionID: opts.SessionID}, nil
+		return engpkg.HeadlessResult{Text: noReply, SessionID: opts.SessionID}, nil
 	}
 	ev := &progressEvents{}
 	handleMessage(svc, reactingOut{fakeProgressOut: fakeProgressOut{ev: ev}, reactErr: errors.New("boom")}, "你好")
@@ -245,9 +245,9 @@ func TestReactToolErrorReachesCodex(t *testing.T) {
 	svc, engine, ts := actionsService(t)
 	var result string
 	var isErr bool
-	engine.replyFor = func(opts engine.ReplyOptions) (engine.HeadlessResult, error) {
+	engine.replyFor = func(opts engpkg.ReplyOptions) (engpkg.HeadlessResult, error) {
 		result, isErr = callReact(t, ts, tokenFrom(t, opts.Env), "👍🏻")
-		return engine.HeadlessResult{Text: "ok", SessionID: opts.SessionID}, nil
+		return engpkg.HeadlessResult{Text: "ok", SessionID: opts.SessionID}, nil
 	}
 	ev := &progressEvents{}
 	out := reactToolErrOut{reactingPlain{ev: ev}}
@@ -295,12 +295,12 @@ func TestReactOnlyAfterSessionRebuildKeepsNotice(t *testing.T) {
 	svc, engine, ts := actionsService(t)
 	svc.ProgressInterval = time.Nanosecond
 	sendChat(t, svc, "first")
-	engine.replyFor = func(opts engine.ReplyOptions) (engine.HeadlessResult, error) {
+	engine.replyFor = func(opts engpkg.ReplyOptions) (engpkg.HeadlessResult, error) {
 		if !opts.NewSession {
-			return engine.HeadlessResult{}, &engine.RunError{Message: "session not found"}
+			return engpkg.HeadlessResult{}, &engpkg.RunError{Message: "session not found"}
 		}
 		callReact(t, ts, tokenFrom(t, opts.Env), "👍")
-		return engine.HeadlessResult{Text: noReply, SessionID: opts.SessionID}, nil
+		return engpkg.HeadlessResult{Text: noReply, SessionID: opts.SessionID}, nil
 	}
 	ev := &progressEvents{}
 	handleMessage(svc, reactingOut{fakeProgressOut: fakeProgressOut{ev: ev}}, "second")
@@ -335,11 +335,11 @@ func TestTaskTurnHasNoReact(t *testing.T) {
 
 	// End to end: a scheduled run reaches the engine without the react tool.
 	engine := svc.Engine.(*fakeEngine)
-	engine.replyFor = func(opts engine.ReplyOptions) (engine.HeadlessResult, error) {
+	engine.replyFor = func(opts engpkg.ReplyOptions) (engpkg.HeadlessResult, error) {
 		if opts.React {
 			t.Error("task run offered react")
 		}
-		return engine.HeadlessResult{Text: "done", SessionID: opts.SessionID}, nil
+		return engpkg.HeadlessResult{Text: "done", SessionID: opts.SessionID}, nil
 	}
 	svc.Senders = map[string]platform.Replier{"telegram": out}
 	svc.Location = taskZone

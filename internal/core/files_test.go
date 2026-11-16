@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rshun/agent-bot/internal/engine"
+	engpkg "github.com/rshun/agent-bot/internal/engine"
 	"github.com/rshun/agent-bot/internal/platform"
 )
 
@@ -136,12 +136,12 @@ func TestSendFileCheckedAndSentAfterReply(t *testing.T) {
 	path := writeTemp(t, "a.txt", "hello")
 	var result string
 	var isErr bool
-	engine.replyFor = func(opts engine.ReplyOptions) (engine.HeadlessResult, error) {
+	engine.replyFor = func(opts engpkg.ReplyOptions) (engpkg.HeadlessResult, error) {
 		if !opts.SendFile || !opts.FileTools {
 			t.Errorf("send_file not offered: send=%v files=%v", opts.SendFile, opts.FileTools)
 		}
 		result, isErr = callSendFile(t, ts, tokenFrom(t, opts.Env), path, "  看这个 \n")
-		return engine.HeadlessResult{Text: "好了", SessionID: opts.SessionID}, nil
+		return engpkg.HeadlessResult{Text: "好了", SessionID: opts.SessionID}, nil
 	}
 	ev := &progressEvents{}
 	handleMessage(svc, fileOut{reactingOut: reactingOut{fakeProgressOut: fakeProgressOut{ev: ev}}, limit: 1 << 20}, "发我 a.txt")
@@ -159,9 +159,9 @@ func TestSendFileCheckedAndSentAfterReply(t *testing.T) {
 func TestSendFileWithoutProgressMessage(t *testing.T) {
 	svc, engine, ts := grantService(t)
 	path := writeTemp(t, "a.txt", "hello")
-	engine.replyFor = func(opts engine.ReplyOptions) (engine.HeadlessResult, error) {
+	engine.replyFor = func(opts engpkg.ReplyOptions) (engpkg.HeadlessResult, error) {
 		callSendFile(t, ts, tokenFrom(t, opts.Env), path, "")
-		return engine.HeadlessResult{Text: "好了", SessionID: opts.SessionID}, nil
+		return engpkg.HeadlessResult{Text: "好了", SessionID: opts.SessionID}, nil
 	}
 	ev := &progressEvents{}
 	handleMessage(svc, filePlain{reactingPlain: reactingPlain{ev: ev}, limit: 1 << 20}, "发我 a.txt")
@@ -175,9 +175,9 @@ func TestSendFileWithoutProgressMessage(t *testing.T) {
 func TestSendFileTruncatesCaption(t *testing.T) {
 	svc, engine, ts := grantService(t)
 	path := writeTemp(t, "a.txt", "x")
-	engine.replyFor = func(opts engine.ReplyOptions) (engine.HeadlessResult, error) {
+	engine.replyFor = func(opts engpkg.ReplyOptions) (engpkg.HeadlessResult, error) {
 		callSendFile(t, ts, tokenFrom(t, opts.Env), path, strings.Repeat("字", 1100))
-		return engine.HeadlessResult{Text: "好了", SessionID: opts.SessionID}, nil
+		return engpkg.HeadlessResult{Text: "好了", SessionID: opts.SessionID}, nil
 	}
 	ev := &progressEvents{}
 	handleMessage(svc, filePlain{reactingPlain: reactingPlain{ev: ev}, limit: 1 << 20}, "发我")
@@ -193,12 +193,12 @@ func TestSendFileRefusedWithoutFileTools(t *testing.T) {
 	// No sandbox profile: file tools stay off, so send_file is neither listed nor described.
 	svc, engine, ts := actionsService(t)
 	var names []string
-	engine.replyFor = func(opts engine.ReplyOptions) (engine.HeadlessResult, error) {
+	engine.replyFor = func(opts engpkg.ReplyOptions) (engpkg.HeadlessResult, error) {
 		if opts.SendFile || opts.FileTools {
 			t.Errorf("send=%v files=%v", opts.SendFile, opts.FileTools)
 		}
 		names = toolNames(t, ts, tokenFrom(t, opts.Env))
-		return engine.HeadlessResult{Text: "pong", SessionID: opts.SessionID}, nil
+		return engpkg.HeadlessResult{Text: "pong", SessionID: opts.SessionID}, nil
 	}
 	ev := &progressEvents{}
 	handleMessage(svc, filePlain{reactingPlain: reactingPlain{ev: ev}, limit: 1 << 20}, "hi")
@@ -209,12 +209,12 @@ func TestSendFileRefusedWithoutFileTools(t *testing.T) {
 
 	// File tools on, but the replier cannot send files.
 	svc, engine, ts = grantService(t)
-	engine.replyFor = func(opts engine.ReplyOptions) (engine.HeadlessResult, error) {
+	engine.replyFor = func(opts engpkg.ReplyOptions) (engpkg.HeadlessResult, error) {
 		if !opts.FileTools || opts.SendFile {
 			t.Errorf("send=%v files=%v", opts.SendFile, opts.FileTools)
 		}
 		names = toolNames(t, ts, tokenFrom(t, opts.Env))
-		return engine.HeadlessResult{Text: "pong", SessionID: opts.SessionID}, nil
+		return engpkg.HeadlessResult{Text: "pong", SessionID: opts.SessionID}, nil
 	}
 	rec := &recorder{}
 	svc.Handle(context.Background(), platform.Inbound{Platform: "telegram", ChatID: "9", UserID: "1", Text: "hi", TextMessage: true}, capture{rec})
@@ -229,9 +229,9 @@ func TestSendFileRespectsPlatformLimit(t *testing.T) {
 	path := writeTemp(t, "big.bin", "12345678901") // 11 bytes
 	var result string
 	var isErr bool
-	engine.replyFor = func(opts engine.ReplyOptions) (engine.HeadlessResult, error) {
+	engine.replyFor = func(opts engpkg.ReplyOptions) (engpkg.HeadlessResult, error) {
 		result, isErr = callSendFile(t, ts, tokenFrom(t, opts.Env), path, "")
-		return engine.HeadlessResult{Text: "好了", SessionID: opts.SessionID}, nil
+		return engpkg.HeadlessResult{Text: "好了", SessionID: opts.SessionID}, nil
 	}
 	ev := &progressEvents{}
 	handleMessage(svc, filePlain{reactingPlain: reactingPlain{ev: ev}, limit: 10}, "发我")
@@ -257,9 +257,9 @@ func TestSendFileRefusesDeniedFile(t *testing.T) {
 	}
 	var result string
 	var isErr bool
-	engine.replyFor = func(opts engine.ReplyOptions) (engine.HeadlessResult, error) {
+	engine.replyFor = func(opts engpkg.ReplyOptions) (engpkg.HeadlessResult, error) {
 		result, isErr = callSendFile(t, ts, tokenFrom(t, opts.Env), deny, "")
-		return engine.HeadlessResult{Text: "好了", SessionID: opts.SessionID}, nil
+		return engpkg.HeadlessResult{Text: "好了", SessionID: opts.SessionID}, nil
 	}
 	ev := &progressEvents{}
 	handleMessage(svc, filePlain{reactingPlain: reactingPlain{ev: ev}, limit: 1 << 20}, "发我")
@@ -278,7 +278,7 @@ func TestFlushFilesReportsFailureAndContinues(t *testing.T) {
 	svc.ProgressInterval = time.Nanosecond
 	first := writeTemp(t, "a.txt", "one")
 	second := writeTemp(t, "b.txt", "two")
-	engine.replyFor = func(opts engine.ReplyOptions) (engine.HeadlessResult, error) {
+	engine.replyFor = func(opts engpkg.ReplyOptions) (engpkg.HeadlessResult, error) {
 		token := tokenFrom(t, opts.Env)
 		callSendFile(t, ts, token, first, "")
 		callSendFile(t, ts, token, second, "")
@@ -286,7 +286,7 @@ func TestFlushFilesReportsFailureAndContinues(t *testing.T) {
 		if err := os.Remove(first); err != nil {
 			t.Fatal(err)
 		}
-		return engine.HeadlessResult{Text: "好了", SessionID: opts.SessionID}, nil
+		return engpkg.HeadlessResult{Text: "好了", SessionID: opts.SessionID}, nil
 	}
 	ev := &progressEvents{}
 	handleMessage(svc, fileOut{reactingOut: reactingOut{fakeProgressOut: fakeProgressOut{ev: ev}}, limit: 1 << 20}, "发我")
@@ -302,11 +302,11 @@ func TestSendFileMaxPerReply(t *testing.T) {
 	svc, engine, ts := grantService(t)
 	path := writeTemp(t, "a.txt", "x")
 	var last string
-	engine.replyFor = func(opts engine.ReplyOptions) (engine.HeadlessResult, error) {
+	engine.replyFor = func(opts engpkg.ReplyOptions) (engpkg.HeadlessResult, error) {
 		for i := 0; i < 11; i++ {
 			last, _ = callSendFile(t, ts, tokenFrom(t, opts.Env), path, "")
 		}
-		return engine.HeadlessResult{Text: "好了", SessionID: opts.SessionID}, nil
+		return engpkg.HeadlessResult{Text: "好了", SessionID: opts.SessionID}, nil
 	}
 	ev := &progressEvents{}
 	handleMessage(svc, filePlain{reactingPlain: reactingPlain{ev: ev}, limit: 1 << 20}, "发我")
@@ -321,11 +321,11 @@ func TestReactOnlyStillSendsFiles(t *testing.T) {
 	svc, engine, ts := grantService(t)
 	svc.ProgressInterval = time.Nanosecond
 	path := writeTemp(t, "a.txt", "hello")
-	engine.replyFor = func(opts engine.ReplyOptions) (engine.HeadlessResult, error) {
+	engine.replyFor = func(opts engpkg.ReplyOptions) (engpkg.HeadlessResult, error) {
 		token := tokenFrom(t, opts.Env)
 		callReact(t, ts, token, "👍")
 		callSendFile(t, ts, token, path, "")
-		return engine.HeadlessResult{Text: noReply, SessionID: opts.SessionID}, nil
+		return engpkg.HeadlessResult{Text: noReply, SessionID: opts.SessionID}, nil
 	}
 	ev := &progressEvents{}
 	handleMessage(svc, fileOut{reactingOut: reactingOut{fakeProgressOut: fakeProgressOut{ev: ev}}, limit: 1 << 20}, "发我")
@@ -344,16 +344,16 @@ func TestRebuiltSessionOffersFilesAndDropsFailedResumeFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	var resumeTools, rebuildTools []string
-	engine.replyFor = func(opts engine.ReplyOptions) (engine.HeadlessResult, error) {
+	engine.replyFor = func(opts engpkg.ReplyOptions) (engpkg.HeadlessResult, error) {
 		token := tokenFrom(t, opts.Env)
 		if !opts.NewSession {
 			resumeTools = toolNames(t, ts, token)
 			callSendFile(t, ts, token, stale, "")
-			return engine.HeadlessResult{}, &engine.RunError{Message: "session not found"}
+			return engpkg.HeadlessResult{}, &engpkg.RunError{Message: "session not found"}
 		}
 		rebuildTools = toolNames(t, ts, token)
 		callSendFile(t, ts, token, path, "")
-		return engine.HeadlessResult{Text: "好了", SessionID: opts.SessionID}, nil
+		return engpkg.HeadlessResult{Text: "好了", SessionID: opts.SessionID}, nil
 	}
 	ev := &progressEvents{}
 	handleMessage(svc, filePlain{reactingPlain: reactingPlain{ev: ev}, limit: 1 << 20}, "发我")
@@ -370,12 +370,12 @@ func TestRebuiltSessionOffersFilesAndDropsFailedResumeFiles(t *testing.T) {
 func TestTaskSendsFilesAfterResult(t *testing.T) {
 	svc, engine, ts := grantService(t)
 	path := writeTemp(t, "report.txt", "data")
-	engine.replyFor = func(opts engine.ReplyOptions) (engine.HeadlessResult, error) {
+	engine.replyFor = func(opts engpkg.ReplyOptions) (engpkg.HeadlessResult, error) {
 		if !opts.SendFile {
 			t.Error("task run did not offer send_file")
 		}
 		callSendFile(t, ts, tokenFrom(t, opts.Env), path, "日报")
-		return engine.HeadlessResult{Text: "今天的新闻", SessionID: opts.SessionID}, nil
+		return engpkg.HeadlessResult{Text: "今天的新闻", SessionID: opts.SessionID}, nil
 	}
 	ev := &progressEvents{}
 	svc.Senders = map[string]platform.Replier{"telegram": filePlain{reactingPlain: reactingPlain{ev: ev}, limit: 1 << 20}}
@@ -422,9 +422,9 @@ func (g growOut) SendFile(_ context.Context, _, replyTo string, file platform.Ou
 func TestSendFileReadsOnlyTheCheckedSize(t *testing.T) {
 	svc, engine, ts := grantService(t)
 	path := writeTemp(t, "grow.txt", "one")
-	engine.replyFor = func(opts engine.ReplyOptions) (engine.HeadlessResult, error) {
+	engine.replyFor = func(opts engpkg.ReplyOptions) (engpkg.HeadlessResult, error) {
 		callSendFile(t, ts, tokenFrom(t, opts.Env), path, "")
-		return engine.HeadlessResult{Text: "好了", SessionID: opts.SessionID}, nil
+		return engpkg.HeadlessResult{Text: "好了", SessionID: opts.SessionID}, nil
 	}
 	ev := &progressEvents{}
 	out := growOut{filePlain: filePlain{reactingPlain: reactingPlain{ev: ev}, limit: 1 << 20}, path: path}
