@@ -1,0 +1,21 @@
+[Unit]
+Description=Agent Bot (%i) for Telegram and Discord
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=%i
+Group=%i
+WorkingDirectory=/home/%i
+EnvironmentFile=/etc/agent-bot/%i.env
+# Each service user owns its own binary copy (/home/grok/bin/agent-bot and /home/codex/bin/agent-bot)
+# so in-chat /upgrade and daily AUTO_UPGRADE can atomically replace and exec without root/sudo.
+ExecStart=/home/%i/bin/agent-bot
+NoNewPrivileges=true
+Restart=on-failure
+RestartForceExitStatus=42
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

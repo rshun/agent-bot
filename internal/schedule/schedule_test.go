@@ -1,0 +1,349 @@
+package schedule
+
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+)
+
+var loc = time.FixedZone("CST", 8*3600)
+
+func at(day, hour, minute, second int) time.Time {
+	return time.Date(2026, 10, day, hour, minute, second, 0, loc)
+}
+
+func TestNextDaily(t *testing.T) {
+	s := Spec{Kind: "daily", Time: "09:00"}
+	if got, ok := s.Next(at(19, 9, 0, 10), loc); !ok || !got.Equal(at(20, 9, 0, 0)) {
+		t.Fatalf("after 09:00:10 got %v %v", got, ok)
+	}
+	if got, ok := s.Next(at(19, 8, 59, 0), loc); !ok || !got.Equal(at(19, 9, 0, 0)) {
+		t.Fatalf("before 09:00 got %v %v", got, ok)
+	}
+	if got, _ := s.Next(at(19, 9, 0, 0), loc); !got.Equal(at(20, 9, 0, 0)) {
+		t.Fatalf("exactly 09:00 must move on, got %v", got)
+	}
+}
+
+func TestNextWeekly(t *testing.T) {
+	monday := at(19, 10, 0, 0)
+	if monday.Weekday() != time.Monday {
+		t.Fatalf("fixture is %v", monday.Weekday())
+	}
+	s := Spec{Kind: "weekly", Time: "09:00", Weekdays: []int{1}}
+	if got, ok := s.Next(monday, loc); !ok || !got.Equal(at(26, 9, 0, 0)) {
+		t.Fatalf("got %v %v", got, ok)
+	}
+	s.Weekdays = []int{3, 5}
+	if got, _ := s.Next(monday, loc); !got.Equal(at(21, 9, 0, 0)) {
+		t.Fatalf("got %v", got)
+	}
+}
+
+func TestNextInterval(t *testing.T) {
+	s := Spec{Kind: "interval", EveryMinutes: 90}
+	start := at(19, 10, 0, 0)
+	if got, ok := s.Next(start, loc); !ok || !got.Equal(start.Add(90*time.Minute)) {
+		t.Fatalf("got %v %v", got, ok)
+	}
+}
+
+func TestNextOnce(t *testing.T) {
+	s := Spec{Kind: "once", At: "2026-10-20 15:00"}
+	if got, ok := s.Next(at(19, 10, 0, 0), loc); !ok || !got.Equal(at(20, 15, 0, 0)) {
+		t.Fatalf("got %v %v", got, ok)
+	}
+	if _, ok := s.Next(at(21, 10, 0, 0), loc); ok {
+		t.Fatal("past one-off task still has a next run")
+	}
+}
+
+func TestNextDatesFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "dates.txt")
+	content := "# custom schedule\n\n20261025\r\n2026-10-20\n20261018\n"
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s := Spec{Kind: "dates", Time: "09:30", DateFile: path}
+	if err := s.Validate(at(19, 10, 0, 0), loc, time.Hour); err != nil {
+		t.Fatalf("validate failed: %v", err)
+	}
+	got, ok := s.Next(at(19, 10, 0, 0), loc)
+	if !ok || !got.Equal(at(20, 9, 30, 0)) {
+		t.Fatalf("first next got %v %v, want 2026-10-20 09:30", got, ok)
+	}
+	got, ok = s.Next(at(20, 9, 30, 0), loc)
+	if !ok || !got.Equal(at(25, 9, 30, 0)) {
+		t.Fatalf("second next got %v %v, want 2026-10-25 09:30", got, ok)
+	}
+	if _, ok := s.Next(at(25, 9, 30, 0), loc); ok {
+		t.Fatal("expected no more runs after last date in file")
+	}
+}
+
+func TestValidateDatesFileErrors(t *testing.T) {
+	dir := t.TempDir()
+	now := at(19, 10, 0, 0)
+
+	badFormat := filepath.Join(dir, "bad.txt")
+	_ = os.WriteFile(badFormat, []byte("2026/10/20\n"), 0o600)
+
+	pastOnly := filepath.Join(dir, "past.txt")
+	_ = os.WriteFile(pastOnly, []byte("20261018\n"), 0o600)
+
+	emptyFile := filepath.Join(dir, "empty.txt")
+	_ = os.WriteFile(emptyFile, []byte("# only comments\n\n"), 0o600)
+
+	cases := map[string]Spec{
+		"missing path":  {Kind: "dates", Time: "09:00"},
+		"relative path": {Kind: "dates", Time: "09:00", DateFile: "dates.txt"},
+		"not found":     {Kind: "dates", Time: "09:00", DateFile: filepath.Join(dir, "missing.txt")},
+		"bad line":      {Kind: "dates", Time: "09:00", DateFile: badFormat},
+		"past only":     {Kind: "dates", Time: "09:00", DateFile: pastOnly},
+		"empty":         {Kind: "dates", Time: "09:00", DateFile: emptyFile},
+	}
+	for name, s := range cases {
+		if err := s.Validate(now, loc, time.Hour); err == nil {
+			t.Errorf("%s: expected error for %#v", name, s)
+		}
+	}
+}
+
+func TestValidate(t *testing.T) {
+	now := at(19, 10, 0, 0)
+	bad := map[string]Spec{
+		"unknown kind":    {Kind: "monthly", Time: "09:00"},
+		"bad time":        {Kind: "daily", Time: "25:00"},
+		"no weekdays":     {Kind: "weekly", Time: "09:00"},
+		"weekday 7":       {Kind: "weekly", Time: "09:00", Weekdays: []int{7}},
+		"short interval":  {Kind: "interval", EveryMinutes: 30},
+		"past once":       {Kind: "once", At: "2026-10-18 09:00"},
+		"malformed once":  {Kind: "once", At: "tomorrow"},
+		"zero interval":   {Kind: "interval"},
+		"negative minute": {Kind: "daily", Time: "09:-1"},
+	}
+	for name, s := range bad {
+		if err := s.Validate(now, loc, time.Hour); err == nil {
+			t.Errorf("%s: accepted %#v", name, s)
+		}
+	}
+	good := []Spec{
+		{Kind: "daily", Time: "09:00"},
+		{Kind: "weekly", Time: "23:59", Weekdays: []int{0, 6}},
+		{Kind: "interval", EveryMinutes: 60},
+		{Kind: "once", At: "2026-10-19 10:30"},
+	}
+	for _, s := range good {
+		if err := s.Validate(now, loc, time.Hour); err != nil {
+			t.Errorf("rejected %#v: %v", s, err)
+		}
+	}
+}
+
+func TestDecode(t *testing.T) {
+	structured := json.RawMessage(`{"kind":"daily","time":"09:00","prompt":"看新闻","summary":"每天 09:00：看新闻"}`)
+	got, err := Decode(structured, "ignored")
+	if err != nil || got.Kind != "daily" || got.Time != "09:00" || got.Prompt != "看新闻" || got.Summary != "每天 09:00：看新闻" {
+		t.Fatalf("%#v %v", got, err)
+	}
+	fenced := "```json\n{\"kind\":\"interval\",\"every_minutes\":120,\"prompt\":\"p\",\"summary\":\"s\"}\n```"
+	got, err = Decode(nil, fenced)
+	if err != nil || got.Kind != "interval" || got.EveryMinutes != 120 {
+		t.Fatalf("%#v %v", got, err)
+	}
+	if _, err := Decode(nil, "not json"); err == nil {
+		t.Fatal("expected error")
+	}
+	got, err = Decode(json.RawMessage(`{"error":"没有说时间"}`), "")
+	if err != nil || got.Error != "没有说时间" {
+		t.Fatalf("%#v %v", got, err)
+	}
+	got, err = Decode(json.RawMessage(`{"kind":"daily","date_file":"/srv/dates.txt","prompt":"p","summary":"s"}`), "")
+	if err != nil || got.Kind != "dates" || got.Time != "09:00" || got.DateFile != "/srv/dates.txt" {
+		t.Fatalf("date_file decode: %#v %v", got, err)
+	}
+	got, err = Decode(json.RawMessage(`{"kind":"daily","time":"09:00","target_platform":"tg","prompt":"p","summary":"s"}`), "")
+	if err != nil || got.TargetPlatform != "telegram" {
+		t.Fatalf("target_platform decode: %#v %v", got, err)
+	}
+}
+
+func TestPromptContainsNowAndZone(t *testing.T) {
+	p := Prompt("每天九点看新闻", time.Date(2026, 10, 19, 2, 30, 0, 0, time.UTC), loc)
+	for _, want := range []string{"2026-10-19 10:30", "CST", "每天九点看新闻"} {
+		if !strings.Contains(p, want) {
+			t.Fatalf("missing %q in %s", want, p)
+		}
+	}
+	pPlat := PromptForPlatform("telegram", "每天九点看新闻，只推当前平台", time.Date(2026, 10, 19, 2, 30, 0, 0, time.UTC), loc, ExistingTask{
+		ID: 1, Summary: "早报", Prompt: "看新闻", TargetPlatform: "discord", NextRun: at(20, 9, 0, 0),
+	})
+	for _, want := range []string{"Current chat platform: telegram.", "push: discord only"} {
+		if !strings.Contains(pPlat, want) {
+			t.Fatalf("missing %q in %s", want, pPlat)
+		}
+	}
+	if !json.Valid([]byte(Schema)) {
+		t.Fatal("Schema is not valid JSON")
+	}
+}
+
+func TestSchemaStrictCompliance(t *testing.T) {
+	var root struct {
+		Type                 string                     `json:"type"`
+		AdditionalProperties *bool                      `json:"additionalProperties"`
+		Required             []string                   `json:"required"`
+		Properties           map[string]json.RawMessage `json:"properties"`
+	}
+	if err := json.Unmarshal([]byte(Schema), &root); err != nil {
+		t.Fatalf("unmarshal Schema: %v", err)
+	}
+	if root.Type != "object" {
+		t.Fatalf("want type=object, got %q", root.Type)
+	}
+	if root.AdditionalProperties == nil || *root.AdditionalProperties != false {
+		t.Fatal("OpenAI strict mode requires additionalProperties: false on root object")
+	}
+	reqSet := make(map[string]bool, len(root.Required))
+	for _, k := range root.Required {
+		reqSet[k] = true
+	}
+	for prop := range root.Properties {
+		if !reqSet[prop] {
+			t.Errorf("property %q must be listed in required for OpenAI strict mode", prop)
+		}
+	}
+	if len(root.Required) != len(root.Properties) {
+		t.Errorf("required count (%d) != properties count (%d)", len(root.Required), len(root.Properties))
+	}
+}
+
+func TestMultiTimesDailyAndCrontab(t *testing.T) {
+	raw := json.RawMessage(`{"action":"create","task_id":0,"kind":"daily","at":"","time":"06:01","times":["06:01","11:02","16:03"],"weekdays":[],"month_days":[],"every_minutes":0,"date_file":"","cron":"","prompt":"发送测试消息","summary":"每天 06:01/11:02/16:03：发送测试消息","error":""}`)
+	parsed, err := Decode(raw, "")
+	if err != nil {
+		t.Fatalf("Decode multi-time: %v", err)
+	}
+	if err := parsed.Validate(at(19, 5, 0, 0), loc, time.Hour); err != nil {
+		t.Fatalf("Validate multi-time: %v", err)
+	}
+	n1, ok := parsed.Next(at(19, 5, 0, 0), loc)
+	if !ok || !n1.Equal(at(19, 6, 1, 0)) {
+		t.Fatalf("first run got %v %v, want 06:01", n1, ok)
+	}
+	n2, ok := parsed.Next(n1, loc)
+	if !ok || !n2.Equal(at(19, 11, 2, 0)) {
+		t.Fatalf("second run got %v %v, want 11:02", n2, ok)
+	}
+	n3, ok := parsed.Next(n2, loc)
+	if !ok || !n3.Equal(at(19, 16, 3, 0)) {
+		t.Fatalf("third run got %v %v, want 16:03", n3, ok)
+	}
+	n4, ok := parsed.Next(n3, loc)
+	if !ok || !n4.Equal(at(20, 6, 1, 0)) {
+		t.Fatalf("next day run got %v %v, want next day 06:01", n4, ok)
+	}
+
+	specBytes, _ := json.Marshal(parsed.Spec)
+	merged := MergeCrontab("", []CronEntry{{
+		ID:      1,
+		Spec:    string(specBytes),
+		Summary: parsed.Summary,
+		NextRun: n1,
+	}}, loc, "/usr/local/bin/AGENT-BOT")
+	for _, want := range []string{
+		"1 6 * * * /usr/local/bin/AGENT-BOT run-task 1",
+		"2 11 * * * /usr/local/bin/AGENT-BOT run-task 1",
+		"3 16 * * * /usr/local/bin/AGENT-BOT run-task 1",
+	} {
+		if !strings.Contains(merged, want) {
+			t.Fatalf("missing %q in crontab:\n%s", want, merged)
+		}
+	}
+}
+
+func TestCronExprAndMergeCrontab(t *testing.T) {
+	entries := []CronEntry{
+		{
+			ID:      1,
+			Spec:    `{"kind":"dates","time":"09:30","date_file":"/srv/dates.txt"}`,
+			Summary: "按日期文件 09:30：检查日志",
+			NextRun: at(20, 9, 30, 0),
+		},
+		{
+			ID:      2,
+			Spec:    `{"kind":"weekly","time":"08:00","weekdays":[1,3,5]}`,
+			Summary: "每周一三五 08:00：看新闻",
+			NextRun: at(21, 8, 0, 0),
+			Paused:  true,
+		},
+	}
+	existing := "0 3 * * * /usr/bin/backup.sh\n# BEGIN AGENT-BOT TASKS\nold line\n# END AGENT-BOT TASKS\n"
+	merged := MergeCrontab(existing, entries, loc, "cd '/srv/bot' && '/usr/local/bin/AGENT-BOT'")
+	for _, want := range []string{
+		"0 3 * * * /usr/bin/backup.sh",
+		"# BEGIN AGENT-BOT TASKS",
+		"# #1 按日期文件 09:30：检查日志 (next: 2026-10-20 09:30, date_file: /srv/dates.txt)",
+		"30 9 * * * cd '/srv/bot' && '/usr/local/bin/AGENT-BOT' run-task 1",
+		"# #2 [PAUSED] 每周一三五 08:00：看新闻",
+		"# 0 8 * * 1,3,5 cd '/srv/bot' && '/usr/local/bin/AGENT-BOT' run-task 2",
+		"# END AGENT-BOT TASKS",
+	} {
+		if !strings.Contains(merged, want) {
+			t.Fatalf("missing %q in:\n%s", want, merged)
+		}
+	}
+	if strings.Contains(merged, "old line") {
+		t.Fatalf("old block not replaced:\n%s", merged)
+	}
+	cleared := MergeCrontab(merged, nil, loc, "AGENT-BOT")
+	if strings.TrimSpace(cleared) != "0 3 * * * /usr/bin/backup.sh" {
+		t.Fatalf("cleared got:\n%s", cleared)
+	}
+}
+
+func TestNextMonthlyAndCron(t *testing.T) {
+	m := Spec{Kind: "monthly", Time: "09:00", MonthDays: []int{1, 15}}
+	if err := m.Validate(at(19, 10, 0, 0), loc, time.Hour); err != nil {
+		t.Fatalf("monthly validate: %v", err)
+	}
+	next, ok := m.Next(at(19, 10, 0, 0), loc)
+	want := time.Date(2026, 11, 1, 9, 0, 0, 0, loc)
+	if !ok || !next.Equal(want) {
+		t.Fatalf("monthly next got %v %v, want %v", next, ok, want)
+	}
+	expr, err := m.CronExpr(loc)
+	if err != nil || expr != "0 9 1,15 * *" {
+		t.Fatalf("monthly cron expr: %q %v", expr, err)
+	}
+
+	lastDay := Spec{Kind: "monthly", Time: "18:00", MonthDays: []int{-1}}
+	febStart := time.Date(2026, 2, 10, 12, 0, 0, 0, loc)
+	gotLast, ok := lastDay.Next(febStart, loc)
+	if !ok || !gotLast.Equal(time.Date(2026, 2, 28, 18, 0, 0, 0, loc)) {
+		t.Fatalf("feb last day got %v %v", gotLast, ok)
+	}
+	if lastDay.MatchesRun(time.Date(2026, 3, 28, 18, 0, 0, 0, loc), time.Time{}, loc) {
+		t.Fatal("March 28 must not match last-day-of-month")
+	}
+	if !lastDay.MatchesRun(time.Date(2026, 3, 31, 18, 0, 0, 0, loc), time.Time{}, loc) {
+		t.Fatal("March 31 must match last-day-of-month")
+	}
+
+	c := Spec{Kind: "cron", Cron: "30 9 * * 1-5"}
+	if err := c.Validate(at(19, 10, 0, 0), loc, time.Hour); err != nil {
+		t.Fatalf("cron validate: %v", err)
+	}
+	cNext, ok := c.Next(at(19, 10, 0, 0), loc)
+	if !ok || !cNext.Equal(at(20, 9, 30, 0)) {
+		t.Fatalf("cron next got %v %v", cNext, ok)
+	}
+	tooFast := Spec{Kind: "cron", Cron: "*/15 * * * *"}
+	if err := tooFast.Validate(at(19, 10, 0, 0), loc, time.Hour); err == nil {
+		t.Fatal("expected minInterval rejection for */15 cron")
+	}
+}
