@@ -315,7 +315,7 @@ func TestTaskEmptyAnswerSuppressesAndErrorReportsFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := sent.wait(t, 1)
-	want := "⏰ 定时任务 #1：每天 09:00：看新闻\n\nupstream timeout"
+	want := "⏰ 定时任务 #1：每天 09:00：看新闻\n\n" + engpkg.UserFacing(&engpkg.RunError{Message: "upstream timeout"})
 	if got[0] != want {
 		t.Fatalf("got %q, want %q", got[0], want)
 	}

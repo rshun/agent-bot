@@ -798,11 +798,11 @@ func (s *Service) runTaskWithProgress(ctx context.Context, in platform.Inbound, 
 	header := taskHeader(t)
 	chat, err := s.Store.Chat(ctx, t.Platform, t.ChatID)
 	if err != nil {
-		return header + "\n\n" + engine.UserFacing(err), nil, false
+		return header + "\n\n" + engine.UserFacingFor(err, s.engineName()), nil, false
 	}
 	sessionID, err := newUUID()
 	if err != nil {
-		return header + "\n\n" + engine.UserFacing(err), nil, false
+		return header + "\n\n" + engine.UserFacingFor(err, s.engineName()), nil, false
 	}
 	var unsafeMedia atomic.Bool
 	imageGen := s.canGenerateImages(out)
@@ -828,7 +828,7 @@ func (s *Service) runTaskWithProgress(ctx context.Context, in platform.Inbound, 
 	}
 	if err != nil {
 		slog.Error("task run failed", "task", t.ID, "err", err)
-		return header + "\n\n" + engine.UserFacing(err), nil, false
+		return header + "\n\n" + engine.UserFacingFor(err, s.engineName()), nil, false
 	}
 	var files []actions.File
 	if turn != nil {

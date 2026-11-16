@@ -661,7 +661,7 @@ func (s *Service) chatTurn(ctx context.Context, in platform.Inbound, out platfor
 		if engine.IsMaxTurns(err) {
 			_ = s.Store.SetSession(ctx, in.Platform, in.ChatID, res.sessionID)
 			s.recordSessionTurn(ctx, in, res.sessionID, chat.Model, opts.Sandbox)
-			res.text = engine.UserFacing(err)
+			res.text = engine.UserFacingFor(err, s.engineName())
 			return res.chatResult, nil
 		}
 		return chatResult{}, err
@@ -692,7 +692,7 @@ func (s *Service) startSession(ctx context.Context, in platform.Inbound, out pla
 		if engine.IsMaxTurns(err) {
 			_ = s.Store.StartSession(ctx, in.Platform, in.ChatID, res.sessionID, profile)
 			s.recordSessionTurn(ctx, in, res.sessionID, opts.Model, profile)
-			res.text = engine.UserFacing(err)
+			res.text = engine.UserFacingFor(err, s.engineName())
 			return res.chatResult, nil
 		}
 		return chatResult{}, err
