@@ -70,7 +70,6 @@ func TestCheckAndUpgradeCLIFallbackDownload(t *testing.T) {
 	srv = httptest.NewServer(mux)
 	defer srv.Close()
 
-	replaced := false
 	c := &Client{
 		Bin:               binPath,
 		HTTP:              srv.Client(),
@@ -82,7 +81,7 @@ func TestCheckAndUpgradeCLIFallbackDownload(t *testing.T) {
 		GOARCH:            "amd64",
 		RunUpdateCmd: func(_ context.Context, _ time.Duration, name string, args ...string) (string, error) {
 			if len(args) == 1 && args[0] == "--version" {
-				if replaced {
+				if data, err := os.ReadFile(binPath); err == nil && bytes.Equal(data, newELF) {
 					return "agy 1.6.0", nil
 				}
 				return "agy 1.5.18", nil
@@ -100,7 +99,6 @@ func TestCheckAndUpgradeCLIFallbackDownload(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpgradeCLI: %v", err)
 	}
-	replaced = true
 	if !res.Changed || res.OldVersion != "1.5.18" || res.NewVersion != "1.6.0" {
 		t.Fatalf("unexpected CLIUpgradeResult: %#v", res)
 	}
