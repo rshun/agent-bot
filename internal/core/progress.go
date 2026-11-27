@@ -23,25 +23,25 @@ const (
 )
 
 // progressKeys are the tool input fields that carry something worth showing, in priority order.
-var progressKeys = []string{"command", "query", "prompt", "text", "url", "target_file", "path", "target_directory", "file_path", "tool_name"}
+var progressKeys = []string{"command", "CommandLine", "query", "prompt", "Prompt", "text", "url", "Url", "target_file", "TargetFile", "AbsolutePath", "DirectoryPath", "SearchDirectory", "SearchPath", "path", "target_directory", "file_path", "tool_name", "ToolName"}
 
 // progressText turns a tool call into one short status line.
 func progressText(t engine.ToolUse) string {
 	var label string
 	switch t.Name {
-	case "web_search":
+	case "web_search", "search_web":
 		label = "正在搜索"
-	case "web_fetch":
+	case "web_fetch", "read_url_content":
 		label = "正在打开网页"
-	case "image_gen":
+	case "image_gen", "generate_image":
 		label = "正在生成图片"
 	case "image_edit":
 		label = "正在修改图片"
-	case "read_file", "list_dir", "grep", "Read", "Glob", "Grep":
+	case "read_file", "list_dir", "grep", "Read", "Glob", "Grep", "view_file", "find_by_name", "grep_search":
 		label = "正在读取"
-	case "write", "search_replace", "Write", "Edit":
+	case "write", "search_replace", "Write", "Edit", "write_to_file", "replace_file_content", "multi_replace_file_content", "write_file", "edit_file":
 		label = "正在写入"
-	case "run_terminal_cmd", "run_terminal_command", "Bash":
+	case "run_terminal_cmd", "run_terminal_command", "Bash", "run_command":
 		label = "正在执行命令"
 	case "mcp__agentbot__pronounce", "agentbot__pronounce", "mcp__codexbot__pronounce", "codexbot__pronounce", "grokbot__pronounce":
 		return withDetail("正在合成标准读音", toolDetail(t.Input))

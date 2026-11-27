@@ -9,7 +9,7 @@ User=%i
 Group=%i
 WorkingDirectory=/home/%i
 EnvironmentFile=/etc/agent-bot/%i.env
-# Each service user owns its own binary copy (/home/grok/bin/agent-bot and /home/codex/bin/agent-bot)
+# Each service user owns its own binary copy (/home/grok/bin/agent-bot, /home/codex/bin/agent-bot, /home/antigravity/bin/agent-bot)
 # so in-chat /upgrade and daily AUTO_UPGRADE can atomically replace and exec without root/sudo.
 ExecStart=/home/%i/bin/agent-bot
 NoNewPrivileges=true

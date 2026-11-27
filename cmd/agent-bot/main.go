@@ -18,6 +18,7 @@ import (
 	"github.com/rshun/agent-bot/internal/config"
 	"github.com/rshun/agent-bot/internal/core"
 	"github.com/rshun/agent-bot/internal/engine"
+	"github.com/rshun/agent-bot/internal/engine/antigravity"
 	"github.com/rshun/agent-bot/internal/engine/codex"
 	"github.com/rshun/agent-bot/internal/engine/grok"
 	"github.com/rshun/agent-bot/internal/media"
@@ -53,6 +54,18 @@ func main() {
 			fmt.Println(pushUsage)
 			return
 		}
+	case modeMCPBridge:
+		if err := actions.RunStdioBridge(context.Background(), os.Stdin, os.Stdout, inv.BridgeURL, os.Getenv(actions.TokenEnv), nil); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	case modeAGYHook:
+		if err := antigravity.RunPreToolHook(os.Stdin, os.Stdout, os.Getenv(antigravity.PolicyEnv)); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
 	}
 
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, nil)))
@@ -179,8 +192,13 @@ func main() {
 		Policy:        policy,
 	}
 
+	botBin := exePaths.TargetPath
+	if botBin == "" {
+		botBin = exePaths.LaunchPath
+	}
 	var eng engine.Engine
-	if cfg.Engine == "codex" {
+	switch cfg.Engine {
+	case "codex":
 		eng = &codex.Client{
 			Bin:          cfg.EngineBin,
 			NPMBin:       cfg.NPMBin,
@@ -192,7 +210,21 @@ func main() {
 			MaxTurns:     cfg.EngineMaxTurns,
 			InboxDir:     inbox,
 		}
-	} else {
+	case "antigravity":
+		eng = &antigravity.Client{
+			Bin:          cfg.EngineBin,
+			BotBin:       botBin,
+			Workspace:    workspace,
+			AuthPath:     cfg.AuthPath,
+			DefaultModel: cfg.DefaultModel,
+			ModelsList:   cfg.CandidateModels,
+			MediaDir:     mediaDir,
+			InboxDir:     inbox,
+			DenyPaths:    policy.Deny(),
+			Timeout:      cfg.EngineTimeout,
+			MaxTurns:     cfg.EngineMaxTurns,
+		}
+	default:
 		eng = &grok.Client{
 			Bin:          cfg.EngineBin,
 			Workspace:    workspace,
@@ -217,14 +249,25 @@ func main() {
 	if actionsSrv, err := actions.Listen("127.0.0.1:0"); err != nil {
 		slog.Error("actions listen; chat actions are off", "err", err)
 	} else {
-		cfgPath := filepath.Join(workspace, "."+cfg.Engine, "config.toml")
-		switch err := actions.WriteConfigForEngine(cfgPath, actionsSrv.Port(), cfg.Engine); {
-		case err == nil:
-			actionsForSvc = actionsSrv
-		case errors.Is(err, actions.ErrUnmanaged):
-			slog.Warn("workspace engine config.toml was not written by the bot; chat actions are off", "path", cfgPath)
-		default:
-			slog.Error("write engine config; chat actions are off", "err", err)
+		if cfg.Engine == "antigravity" {
+			switch err := actions.WriteAntigravityMCPConfig(workspace, botBin, actionsSrv.Port()); {
+			case err == nil:
+				actionsForSvc = actionsSrv
+			case errors.Is(err, actions.ErrUnmanaged):
+				slog.Warn("workspace .agents/mcp_config.json was not written by the bot; chat actions are off", "dir", workspace)
+			default:
+				slog.Error("write antigravity mcp config; chat actions are off", "err", err)
+			}
+		} else {
+			cfgPath := filepath.Join(workspace, "."+cfg.Engine, "config.toml")
+			switch err := actions.WriteConfigForEngine(cfgPath, actionsSrv.Port(), cfg.Engine); {
+			case err == nil:
+				actionsForSvc = actionsSrv
+			case errors.Is(err, actions.ErrUnmanaged):
+				slog.Warn("workspace engine config.toml was not written by the bot; chat actions are off", "path", cfgPath)
+			default:
+				slog.Error("write engine config; chat actions are off", "err", err)
+			}
 		}
 		if actionsForSvc == nil {
 			_ = actionsSrv.Close()
@@ -427,7 +470,10 @@ func envCandidatePaths(botEnvFile string, exeDirs []string) []string {
 	paths := []string{botEnvFile}
 	for _, hint := range []string{os.Getenv("BOT_ENGINE"), os.Getenv("USER"), os.Getenv("LOGNAME")} {
 		name := strings.ToLower(strings.TrimSpace(hint))
-		if name == "grok" || name == "codex" {
+		if name == "agy" {
+			name = "antigravity"
+		}
+		if name == "grok" || name == "codex" || name == "antigravity" {
 			paths = append(paths, "/etc/agent-bot/"+name+".env")
 		}
 	}

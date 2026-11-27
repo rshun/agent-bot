@@ -7,7 +7,17 @@ import (
 	"strings"
 
 	"github.com/rshun/agent-bot/internal/platform"
+	"github.com/rshun/agent-bot/internal/sandbox"
 )
+
+func normalizeSandboxProfile(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "grokbot", "codexbot":
+		return sandbox.ProfileName
+	default:
+		return strings.TrimSpace(raw)
+	}
+}
 
 const sessionsUsage = `用法：
 /new [备注标题]
@@ -24,7 +34,7 @@ func (s *Service) recordSessionTurn(ctx context.Context, in platform.Inbound, se
 		return
 	}
 	title := summarizeSessionTitle(in.Text)
-	_, _ = s.Store.SaveSessionHistory(ctx, in.Platform, in.ChatID, sessionID, title, model, sandboxProfile, false)
+	_, _ = s.Store.SaveSessionHistory(ctx, in.Platform, in.ChatID, sessionID, title, model, normalizeSandboxProfile(sandboxProfile), false)
 }
 
 func summarizeSessionTitle(text string) string {
@@ -56,7 +66,7 @@ func (s *Service) newTopicCommand(ctx context.Context, in platform.Inbound, arg 
 		if title == "" {
 			title = "未命名对话"
 		}
-		archivedID, err = s.Store.SaveSessionHistory(ctx, in.Platform, in.ChatID, chat.SessionID, title, chat.Model, chat.Sandbox, overwrite)
+		archivedID, err = s.Store.SaveSessionHistory(ctx, in.Platform, in.ChatID, chat.SessionID, title, chat.Model, normalizeSandboxProfile(chat.Sandbox), overwrite)
 		if err != nil {
 			return "", nil, err
 		}
@@ -129,7 +139,11 @@ func (s *Service) sessionsCommand(ctx context.Context, in platform.Inbound, arg 
 	}
 	// Archive the outgoing session first so switching never loses it.
 	if cur, chatErr := s.Store.Chat(ctx, in.Platform, in.ChatID); chatErr == nil && cur.SessionID != "" && cur.SessionID != saved.SessionID {
-		_, _ = s.Store.SaveSessionHistory(ctx, in.Platform, in.ChatID, cur.SessionID, "未命名对话", cur.Model, cur.Sandbox, false)
+		_, _ = s.Store.SaveSessionHistory(ctx, in.Platform, in.ChatID, cur.SessionID, "未命名对话", cur.Model, normalizeSandboxProfile(cur.Sandbox), false)
+	}
+	if norm := normalizeSandboxProfile(saved.Sandbox); norm != saved.Sandbox {
+		saved.Sandbox = norm
+		_, _ = s.Store.SaveSessionHistory(ctx, saved.Platform, saved.ChatID, saved.SessionID, saved.Title, saved.Model, saved.Sandbox, false)
 	}
 	if err := s.Store.ActivateSession(ctx, in.Platform, in.ChatID, saved); err != nil {
 		return "", nil, err

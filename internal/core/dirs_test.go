@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -353,5 +354,51 @@ func TestEmptyReplyWithGrantStillReportsFailure(t *testing.T) {
 	want := "已允许写入 " + real + "。\n\n处理失败：没有得到回复。"
 	if got[0] != want {
 		t.Fatalf("got %q, want %q", got[0], want)
+	}
+}
+
+func TestLegacySandboxProfileMappedOnSessionRestoreAndResume(t *testing.T) {
+	svc, engine, _ := sandboxService(t)
+	ctx := context.Background()
+
+	// Case A: active chat migrated from codex-bot ("codexbot" -> "agentbot")
+	if err := svc.Store.StartSession(ctx, "telegram", "9", "legacy-codex-s1", "codexbot"); err != nil {
+		t.Fatal(err)
+	}
+	rec := &recorder{}
+	say(svc, rec, "继续")
+	rec.wait(t, 1)
+
+	engine.mu.Lock()
+	callA := engine.calls[0]
+	engine.mu.Unlock()
+	if callA.SessionID != "legacy-codex-s1" || callA.Sandbox != sandbox.ProfileName {
+		t.Fatalf("active legacy session sandbox not mapped: %#v", callA)
+	}
+	chatA, err := svc.Store.Chat(ctx, "telegram", "9")
+	if err != nil || chatA.Sandbox != sandbox.ProfileName {
+		t.Fatalf("chat sandbox not upgraded in DB: %#v %v", chatA, err)
+	}
+
+	// Case B: archived session migrated from grok-bot restored via /sessions ("grokbot" -> "agentbot")
+	id, err := svc.Store.SaveSessionHistory(ctx, "discord", "dc-1", "legacy-grok-s2", "旧 Grok 会话", "grok-4", "grokbot", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	say(svc, rec, fmt.Sprintf("/sessions %d", id))
+	rec.wait(t, 2)
+
+	chatB, err := svc.Store.Chat(ctx, "telegram", "9")
+	if err != nil || chatB.SessionID != "legacy-grok-s2" || chatB.Sandbox != sandbox.ProfileName {
+		t.Fatalf("restored legacy session sandbox not mapped: %#v %v", chatB, err)
+	}
+	say(svc, rec, "接着聊")
+	rec.wait(t, 3)
+
+	engine.mu.Lock()
+	callB := engine.calls[1]
+	engine.mu.Unlock()
+	if callB.SessionID != "legacy-grok-s2" || callB.Sandbox != sandbox.ProfileName {
+		t.Fatalf("resumed restored legacy session sandbox mismatch: %#v", callB)
 	}
 }

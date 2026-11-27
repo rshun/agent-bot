@@ -53,6 +53,7 @@ func TestCheckDirRejects(t *testing.T) {
 		"control":             filepath.Join(ok, "a\tb"),
 		"grok home":           filepath.Join(p.Home, ".grok"),
 		"inside grok home":    filepath.Join(p.Home, ".grok", "sessions"),
+		"gemini home":         filepath.Join(p.Home, ".gemini"),
 		"home above grok":     p.Home,
 		"data dir":            p.DataDir,
 		"env file dir":        filepath.Dir(p.EnvFile),

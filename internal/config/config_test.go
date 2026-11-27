@@ -14,6 +14,8 @@ func clearEngineEnvs(t *testing.T) {
 		"BOT_ENGINE", "ENGINE_BIN", "ENGINE_HOME", "AUTH_PATH", "ENGINE_TIMEOUT", "ENGINE_MAX_TURNS", "BOT_MODELS",
 		"GROK_BIN", "GROK_MODEL", "GROK_MODELS", "GROK_HOME", "GROK_AUTH_PATH", "GROK_TIMEOUT", "GROK_MAX_TURNS",
 		"CODEX_BIN", "CODEX_MODEL", "CODEX_MODELS", "CODEX_HOME", "CODEX_AUTH_PATH", "CODEX_TIMEOUT", "CODEX_TIMEOUT_MS", "CODEX_MAX_TURNS",
+		"AGY_BIN", "AGY_MODEL", "AGY_MODELS", "AGY_HOME", "AGY_AUTH_PATH", "AGY_TIMEOUT", "AGY_MAX_TURNS",
+		"ANTIGRAVITY_BIN", "ANTIGRAVITY_MODEL", "ANTIGRAVITY_MODELS", "ANTIGRAVITY_HOME", "ANTIGRAVITY_AUTH_PATH", "ANTIGRAVITY_TIMEOUT", "ANTIGRAVITY_MAX_TURNS",
 		"USER", "LOGNAME",
 	} {
 		t.Setenv(k, "")
@@ -66,6 +68,26 @@ func TestLoadEngineRoutingAndLegacyEnvCompat(t *testing.T) {
 	}
 	if cfg.EngineTimeout != 3*time.Minute {
 		t.Fatalf("EngineTimeout=%v", cfg.EngineTimeout)
+	}
+
+	// Auto-detect antigravity from AGY_* env vars and explicit BOT_ENGINE=agy alias.
+	clearEngineEnvs(t)
+	t.Setenv("AGY_MODEL", "gemini-4-neon-high")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Engine != "antigravity" || cfg.DefaultModel != "gemini-4-neon-high" || cfg.EngineBin != "agy" || cfg.EnvFile != "/etc/agent-bot/antigravity.env" {
+		t.Fatalf("unexpected auto-detected antigravity config: %#v", cfg)
+	}
+	clearEngineEnvs(t)
+	t.Setenv("BOT_ENGINE", "agy")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Engine != "antigravity" || cfg.DefaultModel != defaultAntigravityModel || cfg.EngineBin != "agy" {
+		t.Fatalf("unexpected agy alias config: %#v", cfg)
 	}
 
 	// Explicit invalid BOT_ENGINE rejected

@@ -28,18 +28,21 @@ const (
 	modeHelp
 	modeRunTask
 	modePush
+	modeMCPBridge
+	modeAGYHook
 )
 
 type cliInvocation struct {
-	Mode     cliMode
-	TaskID   int64
-	DataDir  string
-	EnvFile  string
-	PushArgs []string
+	Mode      cliMode
+	TaskID    int64
+	DataDir   string
+	EnvFile   string
+	PushArgs  []string
+	BridgeURL string
 }
 
 const cliUsage = `用法：
-  agent-bot                         启动机器人常驻服务（Telegram / Discord，由 BOT_ENGINE 驱动 grok 或 codex）
+  agent-bot                         启动机器人常驻服务（Telegram / Discord，由 BOT_ENGINE 驱动 grok、codex 或 antigravity）
   agent-bot send [选项] "消息内容"   主动推送文字或文件到私聊（支持管道输入）
   agent-bot run-task <任务编号>      单次执行指定编号的定时任务（供系统调度器调用）
   agent-bot --version               查看版本号
@@ -80,7 +83,12 @@ func parseCLI(args []string) (cliInvocation, error) {
 			return cliInvocation{Mode: modePush}, nil
 		case "run-task":
 			return cliInvocation{}, errors.New("run-task 需要指定任务编号，例如：agent-bot run-task 1")
+		case "agy-hook":
+			return cliInvocation{Mode: modeAGYHook}, nil
 		}
+	}
+	if args[0] == "mcp-bridge" {
+		return parseMCPBridgeArgs(args[1:])
 	}
 	if args[0] == "send" || args[0] == "notify" || args[0] == "push" {
 		return cliInvocation{Mode: modePush, PushArgs: args[1:]}, nil
@@ -108,6 +116,29 @@ func parseCLI(args []string) (cliInvocation, error) {
 		}
 	}
 	return cliInvocation{}, fmt.Errorf("未知命令或参数：%s", strings.Join(args, " "))
+}
+
+func parseMCPBridgeArgs(args []string) (cliInvocation, error) {
+	var bridgeURL string
+	for i := 0; i < len(args); i++ {
+		tok := args[i]
+		switch {
+		case tok == "--url":
+			if i+1 >= len(args) {
+				return cliInvocation{}, errors.New("mcp-bridge 参数 --url 缺少地址")
+			}
+			i++
+			bridgeURL = strings.TrimSpace(args[i])
+		case strings.HasPrefix(tok, "--url="):
+			bridgeURL = strings.TrimSpace(strings.TrimPrefix(tok, "--url="))
+		default:
+			return cliInvocation{}, fmt.Errorf("mcp-bridge 未知参数 %s", tok)
+		}
+	}
+	if bridgeURL == "" {
+		return cliInvocation{}, errors.New("mcp-bridge 需要指定 --url")
+	}
+	return cliInvocation{Mode: modeMCPBridge, BridgeURL: bridgeURL}, nil
 }
 
 func tryParseRunTask(args []string) (cliInvocation, bool, error) {

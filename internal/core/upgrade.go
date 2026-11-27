@@ -119,7 +119,7 @@ func (s *Service) upgradeCommand(ctx context.Context, in platform.Inbound, arg s
 		text, btns, err := s.upgradePanel(ctx, "bot")
 		return text, btns, "", err
 
-	case "cli", "grok", "codex", "engine":
+	case "cli", "grok", "codex", "antigravity", "agy", "engine":
 		text, btns, err := s.upgradePanel(ctx, "cli")
 		return text, btns, "", err
 
@@ -730,8 +730,12 @@ func parseNaturalUpgradeIntent(text string) (string, bool) {
 	for _, cliPhrase := range []string{
 		"升级cli", "更新cli", "升级grokcli", "更新grokcli", "grokcli升级", "grokcli更新",
 		"升级codexcli", "更新codexcli", "codexcli升级", "codexcli更新",
+		"升级antigravitycli", "更新antigravitycli", "antigravitycli升级", "antigravitycli更新",
+		"升级agy", "更新agy", "agy升级", "agy更新", "升级agycli", "更新agycli",
 		"升级底层引擎", "更新底层引擎", "检查cli更新",
-		"upgradecli", "updatecli", "upgradegrokcli", "updategrokcli", "upgradecodexcli", "updatecodexcli", "checkcliupdate",
+		"upgradecli", "updatecli", "upgradegrokcli", "updategrokcli", "upgradecodexcli", "updatecodexcli",
+		"upgradeantigravitycli", "updateantigravitycli", "upgradeagycli", "updateagycli", "upgradeagy", "updateagy",
+		"checkcliupdate",
 	} {
 		if normCompact == cliPhrase {
 			return "cli", true

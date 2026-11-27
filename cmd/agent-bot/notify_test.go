@@ -88,6 +88,22 @@ func TestParseCLI(t *testing.T) {
 		t.Fatal("expected error for missing --data-dir value")
 	}
 
+	inv, err = parseCLI([]string{"agy-hook"})
+	if err != nil || inv.Mode != modeAGYHook {
+		t.Fatalf("agy-hook: %#v, err=%v", inv, err)
+	}
+	inv, err = parseCLI([]string{"mcp-bridge", "--url", "http://127.0.0.1:41234/mcp"})
+	if err != nil || inv.Mode != modeMCPBridge || inv.BridgeURL != "http://127.0.0.1:41234/mcp" {
+		t.Fatalf("mcp-bridge: %#v, err=%v", inv, err)
+	}
+	inv, err = parseCLI([]string{"mcp-bridge", "--url=http://127.0.0.1:51234/mcp"})
+	if err != nil || inv.Mode != modeMCPBridge || inv.BridgeURL != "http://127.0.0.1:51234/mcp" {
+		t.Fatalf("mcp-bridge=: %#v, err=%v", inv, err)
+	}
+	if _, err := parseCLI([]string{"mcp-bridge"}); err == nil {
+		t.Fatal("expected error for bare mcp-bridge")
+	}
+
 	for _, bad := range [][]string{
 		{"--unknown-flag"},
 		{"pushtest", "hello"},
