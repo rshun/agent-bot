@@ -127,6 +127,9 @@ func (p Policy) inMediaDir(path string) bool {
 }
 
 func (p Policy) inSessionImagesDir(path string) bool {
+	if isImageExt(path) && p.inAntigravityBrainDir(path) {
+		return true
+	}
 	dirs := p.EngineDirs()
 	if len(dirs) == 0 {
 		return false
@@ -148,6 +151,35 @@ func (p Policy) inSessionImagesDir(path string) bool {
 	if !strings.EqualFold(filepath.Base(filepath.Dir(path)), "images") {
 		return false
 	}
+	return isImageExt(path)
+}
+
+func (p Policy) inAntigravityBrainDir(path string) bool {
+	if p.Home == "" {
+		return false
+	}
+	for _, sub := range []string{
+		filepath.Join(p.Home, ".gemini", "antigravity-cli", "brain"),
+		filepath.Join(p.Home, ".gemini", "antigravity", "brain"),
+	} {
+		root := resolve(sub)
+		if within(path, root) {
+			rel, err := filepath.Rel(root, path)
+			if err != nil {
+				continue
+			}
+			for _, seg := range strings.Split(filepath.ToSlash(rel), "/") {
+				if strings.EqualFold(seg, ".system_generated") {
+					return false
+				}
+			}
+			return true
+		}
+	}
+	return false
+}
+
+func isImageExt(path string) bool {
 	switch strings.ToLower(filepath.Ext(path)) {
 	case ".jpg", ".jpeg", ".png", ".webp", ".gif":
 		return true

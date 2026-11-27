@@ -143,9 +143,44 @@ func TestSystemPromptForFeatures(t *testing.T) {
 		"agentbot__send_web_image",
 		"- User prefers Go",
 		"- line1 line2",
+		"/dir add rw /absolute/path",
+		"/shell on",
 	} {
 		if !strings.Contains(sp, want) {
 			t.Fatalf("expected %q in system prompt, got:\n%s", want, sp)
+		}
+	}
+	for _, unwanted := range []string{"via /auth on", "/search on"} {
+		if strings.Contains(sp, unwanted) {
+			t.Fatalf("did not expect %q in system prompt, got:\n%s", unwanted, sp)
+		}
+	}
+
+	noSearchSP := systemPromptFor(ReplyOptions{WebSearch: false})
+	for _, want := range []string{"WEB_SEARCH=true", "there is no /search command"} {
+		if !strings.Contains(noSearchSP, want) {
+			t.Fatalf("expected %q in no-search system prompt, got:\n%s", want, noSearchSP)
+		}
+	}
+	for _, unwanted := range []string{"/search on", "via /auth on"} {
+		if strings.Contains(noSearchSP, unwanted) {
+			t.Fatalf("did not expect %q in no-search system prompt, got:\n%s", unwanted, noSearchSP)
+		}
+	}
+
+	grantedSP := systemPromptFor(ReplyOptions{
+		WebSearch:  true,
+		WriteDirs:  []string{" /srv/work "},
+		ShellTools: true,
+	})
+	for _, want := range []string{"authorized writable directories: /srv/work", "/dir add rw /absolute/path"} {
+		if !strings.Contains(grantedSP, want) {
+			t.Fatalf("expected %q in granted system prompt, got:\n%s", want, grantedSP)
+		}
+	}
+	for _, unwanted := range []string{"Shell command execution is currently disabled", "no writable directory is configured", "via /auth on"} {
+		if strings.Contains(grantedSP, unwanted) {
+			t.Fatalf("did not expect %q in granted system prompt, got:\n%s", unwanted, grantedSP)
 		}
 	}
 

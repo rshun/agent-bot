@@ -122,12 +122,19 @@ func wrapToolSafetyMonitor(inner func(engine.ToolUse), imageGen bool, unsafeFlag
 		return nil
 	}
 	return func(tu engine.ToolUse) {
-		if (tu.Name == "image_gen" || tu.Name == "image_edit") && len(tu.Input) > 0 {
+		if (tu.Name == "image_gen" || tu.Name == "image_edit" || tu.Name == "generate_image") && len(tu.Input) > 0 {
 			var in struct {
-				Prompt string `json:"prompt"`
+				Prompt      string `json:"prompt"`
+				UpperPrompt string `json:"Prompt"`
 			}
-			if json.Unmarshal(tu.Input, &in) == nil && media.CheckPromptSafety(in.Prompt) != nil {
-				unsafeFlag.Store(true)
+			if json.Unmarshal(tu.Input, &in) == nil {
+				p := in.Prompt
+				if p == "" {
+					p = in.UpperPrompt
+				}
+				if p != "" && media.CheckPromptSafety(p) != nil {
+					unsafeFlag.Store(true)
+				}
 			}
 		}
 		if inner != nil {

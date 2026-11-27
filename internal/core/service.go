@@ -634,9 +634,11 @@ func (s *Service) chatTurn(ctx context.Context, in platform.Inbound, out platfor
 	opts := base
 	opts.SessionID = chat.SessionID
 	opts.ShellTools = s.shellEnabled(ctx)
-	// A resumed session keeps the sandbox it was created with; when bubblewrap is missing on Linux
+	// A resumed session keeps the sandbox it was created with; legacy grokbot/codexbot
+	// profiles are transparently mapped to agentbot. When bubblewrap is missing on Linux
 	// codex refuses any custom sandbox profile, so run unsandboxed instead.
-	opts.Sandbox = chat.Sandbox
+	normalizedSandbox := normalizeSandboxProfile(chat.Sandbox)
+	opts.Sandbox = normalizedSandbox
 	if ready, profile, rw, _ := s.fileAccess(ctx); ready {
 		if profile == "" {
 			opts.Sandbox = ""
@@ -659,14 +661,22 @@ func (s *Service) chatTurn(ctx context.Context, in platform.Inbound, out platfor
 	}
 	if err != nil {
 		if engine.IsMaxTurns(err) {
-			_ = s.Store.SetSession(ctx, in.Platform, in.ChatID, res.sessionID)
+			if normalizedSandbox != chat.Sandbox {
+				_ = s.Store.StartSession(ctx, in.Platform, in.ChatID, res.sessionID, normalizedSandbox)
+			} else {
+				_ = s.Store.SetSession(ctx, in.Platform, in.ChatID, res.sessionID)
+			}
 			s.recordSessionTurn(ctx, in, res.sessionID, chat.Model, opts.Sandbox)
 			res.text = engine.UserFacingFor(err, s.engineName())
 			return res.chatResult, nil
 		}
 		return chatResult{}, err
 	}
-	if err := s.Store.SetSession(ctx, in.Platform, in.ChatID, res.sessionID); err != nil {
+	if normalizedSandbox != chat.Sandbox {
+		if err := s.Store.StartSession(ctx, in.Platform, in.ChatID, res.sessionID, normalizedSandbox); err != nil {
+			return chatResult{}, err
+		}
+	} else if err := s.Store.SetSession(ctx, in.Platform, in.ChatID, res.sessionID); err != nil {
 		return chatResult{}, err
 	}
 	s.recordSessionTurn(ctx, in, res.sessionID, chat.Model, opts.Sandbox)
@@ -927,11 +937,12 @@ func formatModels(current string, list engine.ModelList) string {
 
 func sessionMissing(err error) bool {
 	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "session") && (strings.Contains(msg, "not found") ||
-		strings.Contains(msg, "does not exist") ||
-		strings.Contains(msg, "no such") ||
-		strings.Contains(msg, "couldn't start") ||
-		strings.Contains(msg, "could not"))
+	return (strings.Contains(msg, "session") || strings.Contains(msg, "conversation") || strings.Contains(msg, "thread")) &&
+		(strings.Contains(msg, "not found") ||
+			strings.Contains(msg, "does not exist") ||
+			strings.Contains(msg, "no such") ||
+			strings.Contains(msg, "couldn't start") ||
+			strings.Contains(msg, "could not"))
 }
 
 func sandboxUnavailable(err error) bool {

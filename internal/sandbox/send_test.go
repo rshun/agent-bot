@@ -172,11 +172,21 @@ func TestCheckSendableRefusesDataDir(t *testing.T) {
 		t.Fatal("pem file inside MediaDir should remain denied")
 	}
 
-	// CheckGeneratedMedia allows MediaDir and .grok/sessions/**/images/*, and rejects arbitrary host files.
+	// CheckGeneratedMedia allows MediaDir, .grok/sessions/**/images/*, and .gemini/antigravity-cli/brain/* images, and rejects arbitrary host files.
 	sessImg := filepath.Join(p.Home, ".grok", "sessions", "ws", "sess-1", "images", "1.jpg")
 	writeFile(t, sessImg, "jpegbytes")
 	if _, _, err := p.CheckGeneratedMedia(sessImg); err != nil {
 		t.Fatalf("session image rejected by CheckGeneratedMedia: %v", err)
+	}
+	agyImg := filepath.Join(p.Home, ".gemini", "antigravity-cli", "brain", "conv-1", "cat.png")
+	writeFile(t, agyImg, "pngbytes")
+	if _, _, err := p.CheckGeneratedMedia(agyImg); err != nil {
+		t.Fatalf("antigravity brain image rejected by CheckGeneratedMedia: %v", err)
+	}
+	agySys := filepath.Join(p.Home, ".gemini", "antigravity-cli", "brain", "conv-1", ".system_generated", "s.png")
+	writeFile(t, agySys, "pngbytes")
+	if _, _, err := p.CheckGeneratedMedia(agySys); err == nil {
+		t.Fatal("antigravity .system_generated image should be rejected")
 	}
 	if _, _, err := p.CheckGeneratedMedia(mp3); err != nil {
 		t.Fatalf("media dir file rejected by CheckGeneratedMedia: %v", err)

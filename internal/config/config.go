@@ -14,17 +14,18 @@ import (
 )
 
 const (
-	defaultGrokModel  = "grok-4.7"
-	defaultCodexModel = "gpt-5.4"
-	defaultBilling    = "https://cli-chat-proxy.grok.com/v1/billing?format=credits"
-	defaultUserURL    = "https://cli-chat-proxy.grok.com/v1/user?include=subscription"
-	defaultUpgradeRepo = "rshun/agent-bot"
+	defaultGrokModel        = "grok-4.7"
+	defaultCodexModel       = "gpt-5.4"
+	defaultAntigravityModel = "gemini-4-hydrogen-medium"
+	defaultBilling          = "https://cli-chat-proxy.grok.com/v1/billing?format=credits"
+	defaultUserURL          = "https://cli-chat-proxy.grok.com/v1/user?include=subscription"
+	defaultUpgradeRepo      = "rshun/agent-bot"
 )
 
 // Config is the process configuration. Secrets come from the environment,
 // which systemd loads from /etc/agent-bot/%i.env.
 type Config struct {
-	// Engine selects the CLI backend: "grok" or "codex".
+	// Engine selects the CLI backend: "grok", "codex", or "antigravity".
 	Engine          string
 	TelegramToken   string
 	DiscordToken    string
@@ -72,9 +73,14 @@ func resolveEngine() (string, error) {
 	switch raw {
 	case "grok", "codex":
 		return raw, nil
+	case "antigravity", "agy":
+		return "antigravity", nil
 	case "":
 		if firstNonEmptyEnv("CODEX_BIN", "CODEX_MODEL", "CODEX_MODELS", "CODEX_HOME", "CODEX_AUTH_PATH") != "" {
 			return "codex", nil
+		}
+		if firstNonEmptyEnv("AGY_BIN", "AGY_MODEL", "AGY_MODELS", "AGY_HOME", "AGY_AUTH_PATH", "ANTIGRAVITY_BIN", "ANTIGRAVITY_MODEL", "ANTIGRAVITY_MODELS", "ANTIGRAVITY_HOME", "ANTIGRAVITY_AUTH_PATH") != "" {
+			return "antigravity", nil
 		}
 		if firstNonEmptyEnv("GROK_BIN", "GROK_MODEL", "GROK_MODELS", "GROK_HOME", "GROK_AUTH_PATH", "GROK_BILLING_URL", "GROK_USER_URL") != "" {
 			return "grok", nil
@@ -82,9 +88,15 @@ func resolveEngine() (string, error) {
 		if strings.EqualFold(strings.TrimSpace(os.Getenv("USER")), "codex") || strings.EqualFold(strings.TrimSpace(os.Getenv("LOGNAME")), "codex") {
 			return "codex", nil
 		}
+		if user := strings.ToLower(strings.TrimSpace(os.Getenv("USER"))); user == "antigravity" || user == "agy" {
+			return "antigravity", nil
+		}
+		if logname := strings.ToLower(strings.TrimSpace(os.Getenv("LOGNAME"))); logname == "antigravity" || logname == "agy" {
+			return "antigravity", nil
+		}
 		return "grok", nil
 	default:
-		return "", fmt.Errorf("BOT_ENGINE must be \"grok\" or \"codex\" (got %q)", raw)
+		return "", fmt.Errorf("BOT_ENGINE must be \"grok\", \"codex\", or \"antigravity\" (got %q)", raw)
 	}
 }
 
@@ -147,7 +159,7 @@ func Load() (Config, error) {
 	}
 
 	timeout := 10 * time.Minute
-	if raw := firstNonEmptyEnv("ENGINE_TIMEOUT", "GROK_TIMEOUT", "CODEX_TIMEOUT"); raw != "" {
+	if raw := firstNonEmptyEnv("ENGINE_TIMEOUT", "GROK_TIMEOUT", "CODEX_TIMEOUT", "AGY_TIMEOUT", "ANTIGRAVITY_TIMEOUT"); raw != "" {
 		timeout, err = time.ParseDuration(raw)
 		if err != nil {
 			return Config{}, fmt.Errorf("ENGINE_TIMEOUT: %w", err)
@@ -161,7 +173,7 @@ func Load() (Config, error) {
 	}
 
 	maxTurns := 50
-	if raw := firstNonEmptyEnv("ENGINE_MAX_TURNS", "GROK_MAX_TURNS", "CODEX_MAX_TURNS"); raw != "" {
+	if raw := firstNonEmptyEnv("ENGINE_MAX_TURNS", "GROK_MAX_TURNS", "CODEX_MAX_TURNS", "AGY_MAX_TURNS", "ANTIGRAVITY_MAX_TURNS"); raw != "" {
 		n, nErr := strconv.Atoi(raw)
 		if nErr != nil || n < 0 {
 			return Config{}, fmt.Errorf("ENGINE_MAX_TURNS must be a non-negative integer")
@@ -237,7 +249,8 @@ func Load() (Config, error) {
 
 	var model, bin, engineHome, auth string
 	var models []string
-	if engineName == "codex" {
+	switch engineName {
+	case "codex":
 		model = firstNonEmptyEnv("DEFAULT_MODEL", "CODEX_MODEL")
 		if model == "" {
 			model = defaultCodexModel
@@ -255,7 +268,25 @@ func Load() (Config, error) {
 		if auth == "" {
 			auth = filepath.Join(engineHome, "auth.json")
 		}
-	} else {
+	case "antigravity":
+		model = firstNonEmptyEnv("DEFAULT_MODEL", "AGY_MODEL", "ANTIGRAVITY_MODEL")
+		if model == "" {
+			model = defaultAntigravityModel
+		}
+		models = parseCSVList(firstNonEmptyEnv("BOT_MODELS", "AGY_MODELS", "ANTIGRAVITY_MODELS"))
+		bin = firstNonEmptyEnv("ENGINE_BIN", "AGY_BIN", "ANTIGRAVITY_BIN")
+		if bin == "" {
+			bin = "agy"
+		}
+		engineHome = firstNonEmptyEnv("ENGINE_HOME", "AGY_HOME", "ANTIGRAVITY_HOME")
+		if engineHome == "" {
+			engineHome = filepath.Join(home, ".gemini", "antigravity-cli")
+		}
+		auth = firstNonEmptyEnv("AUTH_PATH", "AGY_AUTH_PATH", "ANTIGRAVITY_AUTH_PATH")
+		if auth == "" {
+			auth = filepath.Join(engineHome, "settings.json")
+		}
+	default:
 		model = firstNonEmptyEnv("DEFAULT_MODEL", "GROK_MODEL")
 		if model == "" {
 			model = defaultGrokModel

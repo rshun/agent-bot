@@ -296,12 +296,23 @@ func systemPromptFor(opts ReplyOptions) string {
 		parts = append(parts, "You are executing an automated scheduled task. If the task checks a condition, schedule, file, or threshold (for example, checking whether a file exists, whether today is a trading day, or whether new records/anomalies exist) and everything is normal with no output or result needed, reply with exactly [[NO_REPLY]] and do not send any files or images. When the task produces content/results or encounters an error/anomaly to report, reply normally.")
 	}
 	if !opts.WebSearch {
-		parts = append(parts, "Web search is disabled for this session. Do not call web_search or fetch_page tools; answer from existing knowledge and tell the user they can enable it with /search on if needed.")
+		parts = append(parts, "Web search is disabled for this bot instance. Do not call web_search or fetch_page tools; answer from existing knowledge (web search is controlled by WEB_SEARCH=true in the server environment config; there is no /search command).")
 	} else {
 		parts = append(parts, "When the user asks for current, real-time, or time-sensitive information (news, prices, releases, live events, weather, sports, recent posts), proactively use web search before answering.")
 	}
-	if len(opts.WriteDirs) == 0 {
-		parts = append(parts, "File modifications are disabled unless the user grants authorization via /auth on.")
+	var writeDirs []string
+	for _, d := range opts.WriteDirs {
+		if trimmed := strings.TrimSpace(d); trimmed != "" {
+			writeDirs = append(writeDirs, trimmed)
+		}
+	}
+	if len(writeDirs) == 0 {
+		parts = append(parts, "File modifications are disabled because no writable directory is configured. Never suggest /auth on (that command does not exist). If the user wants you to create or modify local files, ask them to authorize an absolute directory via /dir add rw /absolute/path (or say \"允许写入 /absolute/path\" in chat).")
+	} else {
+		parts = append(parts, fmt.Sprintf("You may create or modify files only within these authorized writable directories: %s. Writing outside them is blocked; if another directory is needed, ask the user to authorize it via /dir add rw /absolute/path (or say \"允许写入 /absolute/path\"). Never suggest /auth on.", strings.Join(writeDirs, ", ")))
+	}
+	if !opts.ShellTools {
+		parts = append(parts, "Shell command execution is currently disabled. If the user wants you to run terminal/shell commands on the server, tell them to enable it via /shell on (or say \"开启命令执行\" in chat).")
 	}
 	if len(opts.Memories) > 0 {
 		var b strings.Builder

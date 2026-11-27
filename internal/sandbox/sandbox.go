@@ -74,7 +74,11 @@ func (p Policy) EngineDirs() []string {
 		dirs = append(dirs, p.EngineHome)
 	}
 	if p.Home != "" {
-		dirs = append(dirs, filepath.Join(p.Home, ".grok"), filepath.Join(p.Home, ".codex"))
+		dirs = append(dirs,
+			filepath.Join(p.Home, ".grok"),
+			filepath.Join(p.Home, ".codex"),
+			filepath.Join(p.Home, ".gemini"),
+		)
 	}
 	return dirs
 }

@@ -284,8 +284,14 @@ func UserFacingFor(err error, engineName string) string {
 		return ""
 	}
 	cliCmd := "grok"
-	if strings.EqualFold(strings.TrimSpace(engineName), "codex") {
+	loginCmd := "grok login"
+	switch strings.ToLower(strings.TrimSpace(engineName)) {
+	case "codex":
 		cliCmd = "codex"
+		loginCmd = "codex login"
+	case "antigravity", "agy":
+		cliCmd = "agy"
+		loginCmd = "agy"
 	}
 	msg := err.Error()
 	lower := strings.ToLower(msg)
@@ -302,15 +308,17 @@ func UserFacingFor(err error, engineName string) string {
 		return "订阅额度已用完。可以用 /usage 或 /quota 查看剩余情况。"
 	case strings.Contains(lower, "grok auth"),
 		strings.Contains(lower, "codex auth"),
+		strings.Contains(lower, "antigravity auth"),
+		strings.Contains(lower, "agy auth"),
 		strings.Contains(lower, "session token"):
-		return fmt.Sprintf("读不到 %s 登录信息。在运行 bot 的这个用户下执行 %s login 后再试。", cliCmd, cliCmd)
+		return fmt.Sprintf("读不到 %s 登录信息。在运行 bot 的这个用户下执行 %s 登录后再试。", cliCmd, loginCmd)
 	case strings.Contains(lower, "login"),
 		strings.Contains(lower, "unauthorized"),
 		strings.Contains(lower, "authentication"),
 		strings.Contains(lower, "billing http 401"),
 		strings.Contains(lower, "billing http 403"),
 		strings.Contains(lower, "auth"):
-		return fmt.Sprintf("%s 未登录或登录已过期。在运行 bot 的这个用户下执行 %s login 后再试。", cliCmd, cliCmd)
+		return fmt.Sprintf("%s 未登录或登录已过期。在运行 bot 的这个用户下执行 %s 登录后再试。", cliCmd, loginCmd)
 	case IsMaxTurns(err):
 		var runErr *RunError
 		if errors.As(err, &runErr) && strings.TrimSpace(runErr.PartialText) != "" {
