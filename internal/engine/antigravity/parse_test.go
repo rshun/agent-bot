@@ -17,6 +17,26 @@ func TestParseModels(t *testing.T) {
 	if len(list.Names) != 3 || list.Names[1] != "gemini-4-neon-high" {
 		t.Fatalf("Names = %#v", list.Names)
 	}
+
+	noisy := "\x1b[?25l⠋ Fetching models...\rFetching\r\n" +
+		"Loading...\n" +
+		"Available models:\n" +
+		"---\n" +
+		"  gemini-4-neon-high       Gemini 4 Neon (High)\n" +
+		"  claude-opus-5-5-high     Claude Opus 5.5 (High)\n" +
+		"  gpt-oss-120b-medium      GPT-OSS 120B (Medium)\n" +
+		"  Fetching\n" +
+		"\x1b[?25h"
+	cleanList := ParseModels(noisy)
+	want := []string{"gemini-4-neon-high", "claude-opus-5-5-high", "gpt-oss-120b-medium"}
+	if len(cleanList.Names) != len(want) {
+		t.Fatalf("noisy Names = %#v, want %#v", cleanList.Names, want)
+	}
+	for i, w := range want {
+		if cleanList.Names[i] != w {
+			t.Fatalf("noisy Names[%d] = %q, want %q", i, cleanList.Names[i], w)
+		}
+	}
 }
 
 func TestParseUsageOutput(t *testing.T) {

@@ -60,25 +60,58 @@ func statusButtons() [][]platform.Button {
 	}
 }
 
+const (
+	modelButtonsPerRow = 2
+	modelMaxSinglePage = 10 // <= 10 models fit in 5 rows x 2 buttons with no pagination bar
+	modelPageSize      = 8  // > 10 models use 4 rows x 2 buttons + 1 bottom nav row (5 rows max for Discord)
+)
+
+func modelPageBounds(total, page int) (start, end, curPage, totalPages int) {
+	if total <= 0 {
+		return 0, 0, 1, 1
+	}
+	if total <= modelMaxSinglePage {
+		return 0, total, 1, 1
+	}
+	totalPages = (total + modelPageSize - 1) / modelPageSize
+	if page < 1 {
+		page = 1
+	}
+	if page > totalPages {
+		page = totalPages
+	}
+	start = (page - 1) * modelPageSize
+	end = start + modelPageSize
+	if end > total {
+		end = total
+	}
+	return start, end, page, totalPages
+}
+
 func modelButtons(current string, list engine.ModelList) [][]platform.Button {
+	return modelButtonsPage(current, list, 1)
+}
+
+func modelButtonsPage(current string, list engine.ModelList, page int) [][]platform.Button {
 	if len(list.Names) == 0 {
 		return nil
 	}
-	const perRow = 2
-	const maxRows = 5
+	eligible := make([]string, 0, len(list.Names))
+	for _, name := range list.Names {
+		if len("/model "+name) <= 64 {
+			eligible = append(eligible, name)
+		}
+	}
+	if len(eligible) == 0 {
+		return nil
+	}
+	start, end, curPage, totalPages := modelPageBounds(len(eligible), page)
 	var rows [][]platform.Button
 	var curRow []platform.Button
-	for _, name := range list.Names {
-		if len(rows) >= maxRows {
-			break
-		}
-		cmd := "/model " + name
-		if len(cmd) > 64 {
-			continue
-		}
+	for _, name := range eligible[start:end] {
 		btn := platform.Button{
 			Label:   name,
-			Command: cmd,
+			Command: "/model " + name,
 			Style:   platform.ButtonSecondary,
 		}
 		if name == current {
@@ -86,13 +119,33 @@ func modelButtons(current string, list engine.ModelList) [][]platform.Button {
 			btn.Style = platform.ButtonSuccess
 		}
 		curRow = append(curRow, btn)
-		if len(curRow) == perRow {
+		if len(curRow) == modelButtonsPerRow {
 			rows = append(rows, curRow)
 			curRow = nil
 		}
 	}
-	if len(curRow) > 0 && len(rows) < maxRows {
+	if len(curRow) > 0 {
 		rows = append(rows, curRow)
+	}
+	if totalPages > 1 {
+		var navRow []platform.Button
+		if curPage > 1 {
+			navRow = append(navRow, platform.Button{
+				Label:   fmt.Sprintf("⬅️ 上一页 (%d/%d)", curPage-1, totalPages),
+				Command: fmt.Sprintf("/model page %d", curPage-1),
+				Style:   platform.ButtonPrimary,
+			})
+		}
+		if curPage < totalPages {
+			navRow = append(navRow, platform.Button{
+				Label:   fmt.Sprintf("下一页 (%d/%d) ➡️", curPage+1, totalPages),
+				Command: fmt.Sprintf("/model page %d", curPage+1),
+				Style:   platform.ButtonPrimary,
+			})
+		}
+		if len(navRow) > 0 {
+			rows = append(rows, navRow)
+		}
 	}
 	return rows
 }

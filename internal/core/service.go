@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -525,11 +526,20 @@ func (s *Service) modelCommand(ctx context.Context, in platform.Inbound, arg str
 	if err != nil {
 		return "", nil, err
 	}
+	arg = strings.TrimSpace(arg)
 	if arg == "" {
-		return formatModels(chat.Model, list), modelButtons(chat.Model, list), nil
+		return formatModelsPage(chat.Model, list, 1), modelButtonsPage(chat.Model, list, 1), nil
+	}
+	fields := strings.Fields(arg)
+	if len(fields) == 2 && (strings.EqualFold(fields[0], "page") || strings.EqualFold(fields[0], "p")) {
+		page, convErr := strconv.Atoi(fields[1])
+		if convErr != nil || page < 1 {
+			return "页码格式不合法，请使用 /model 或 /model page 2。", modelButtonsPage(chat.Model, list, 1), nil
+		}
+		return formatModelsPage(chat.Model, list, page), modelButtonsPage(chat.Model, list, page), nil
 	}
 	if !engine.ValidModelName(arg) {
-		return "模型名称格式不合法。用 /model 查看可用模型。", modelButtons(chat.Model, list), nil
+		return "模型名称格式不合法。用 /model 查看可用模型。", modelButtonsPage(chat.Model, list, 1), nil
 	}
 	if err := s.Store.SetModel(ctx, in.Platform, in.ChatID, arg); err != nil {
 		return "", nil, err
@@ -918,18 +928,33 @@ func (s *Service) triggerPendingRestart() {
 }
 
 func formatModels(current string, list engine.ModelList) string {
+	return formatModelsPage(current, list, 1)
+}
+
+func formatModelsPage(current string, list engine.ModelList, page int) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "当前模型：%s\n\n可用模型：\n", current)
-	shown := map[string]struct{}{}
+	inList := false
 	for _, name := range list.Names {
-		shown[name] = struct{}{}
+		if name == current {
+			inList = true
+			break
+		}
+	}
+	start, end, curPage, totalPages := modelPageBounds(len(list.Names), page)
+	if totalPages > 1 {
+		fmt.Fprintf(&b, "当前模型：%s\n\n可用模型（第 %d/%d 页，共 %d 个，可点按钮翻页或直接发 /model <名称>）：\n",
+			current, curPage, totalPages, len(list.Names))
+	} else {
+		fmt.Fprintf(&b, "当前模型：%s\n\n可用模型：\n", current)
+	}
+	for _, name := range list.Names[start:end] {
 		if name == current {
 			fmt.Fprintf(&b, "- %s（当前）\n", name)
 			continue
 		}
 		fmt.Fprintf(&b, "- %s\n", name)
 	}
-	if _, ok := shown[current]; !ok && current != "" {
+	if !inList && current != "" {
 		fmt.Fprintf(&b, "- %s（当前，不在本次列表里）\n", current)
 	}
 	return strings.TrimSpace(b.String())

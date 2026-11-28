@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rshun/agent-bot/internal/engine"
 	"github.com/rshun/agent-bot/internal/platform"
 	"github.com/rshun/agent-bot/internal/store"
 )
@@ -302,5 +303,122 @@ func TestInteractiveButtonsAndDeterministicTaskSubcommands(t *testing.T) {
 	resumeReply, _ := sendCmd("/task resume 1")
 	if !strings.Contains(resumeReply, "已恢复 #1") || len(eng.calls) != callsBefore {
 		t.Fatalf("expected zero-LLM instant resume, got reply=%q", resumeReply)
+	}
+}
+
+type manyModelsEngine struct {
+	*fakeEngine
+	models []string
+}
+
+func (m *manyModelsEngine) Models(context.Context) (engine.ModelList, error) {
+	def := ""
+	if len(m.models) > 0 {
+		def = m.models[0]
+	}
+	return engine.ModelList{Default: def, Current: def, Names: append([]string(nil), m.models...)}, nil
+}
+
+func TestModelButtonsPagination(t *testing.T) {
+	allModels := []string{
+		"gemini-4-neon-high",
+		"gemini-4-neon-xhigh",
+		"gemini-4-neon-medium",
+		"gemini-4-neon-low",
+		"gemini-4-carbon-medium",
+		"gemini-4-carbon-high",
+		"gemini-4-carbon-low",
+		"gemini-4-argon-medium",
+		"gemini-4-argon-high",
+		"gemini-4-argon-low",
+		"gemini-4-hydrogen-high",
+		"gemini-4-hydrogen-xhigh",
+		"gemini-4-hydrogen-medium",
+		"gemini-4-hydrogen-low",
+		"gemini-pro-orchestrator-neon",
+		"gemini-pro-orchestrator",
+		"gemini-pro-orchestrator-argon",
+		"gemini-3.8-flash-high",
+		"gemini-3.8-flash-medium",
+		"gemini-3.8-flash-low",
+		"claude-opus-5-5-low",
+		"claude-opus-5-5-medium",
+		"claude-opus-5-5-high",
+		"claude-sonnet-5-5-low",
+		"claude-sonnet-5-5-medium",
+		"claude-sonnet-5-5-high",
+		"gpt-oss-120b-medium",
+	}
+
+	eng := &manyModelsEngine{fakeEngine: &fakeEngine{}, models: allModels}
+	svc, _ := newMemoryService(t, eng)
+	svc.AllowedUsers[platform.Discord] = map[string]struct{}{"u1": {}}
+	out := &buttonCaptureOut{}
+
+	sendCmd := func(text string) (string, [][]platform.Button) {
+		t.Helper()
+		svc.Handle(context.Background(), platform.Inbound{
+			Platform: platform.Discord, ChatID: "dc-m1", UserID: "u1", Text: text, TextMessage: true,
+		}, out)
+		waitIdle(t, svc, platform.Discord, "dc-m1")
+		return out.last()
+	}
+
+	// Page 1: 8 models (4 rows x 2) + 1 nav row = 5 rows max for Discord.
+	txt, btns := sendCmd("/model")
+	if !strings.Contains(txt, "第 1/4 页，共 27 个") {
+		t.Fatalf("expected page 1 header, got:\n%s", txt)
+	}
+	if len(btns) > 5 {
+		t.Fatalf("exceeded Discord 5-row component limit: %d rows", len(btns))
+	}
+	if !hasButtonCommand(btns, "/model gemini-4-neon-high") || !hasButtonCommand(btns, "/model gemini-4-argon-medium") {
+		t.Fatalf("missing page 1 models: %#v", btns)
+	}
+	if hasButtonCommand(btns, "/model gemini-4-argon-high") {
+		t.Fatalf("page 2 model leaked into page 1: %#v", btns)
+	}
+	if !hasButtonCommand(btns, "/model page 2") || hasButtonCommand(btns, "/model page 0") {
+		t.Fatalf("unexpected page 1 navigation buttons: %#v", btns)
+	}
+
+	// Page 2: models 9..16 with both prev and next buttons.
+	txt, btns = sendCmd("/model page 2")
+	if !strings.Contains(txt, "第 2/4 页，共 27 个") {
+		t.Fatalf("expected page 2 header, got:\n%s", txt)
+	}
+	if !hasButtonCommand(btns, "/model gemini-4-argon-high") || !hasButtonCommand(btns, "/model gemini-pro-orchestrator") {
+		t.Fatalf("missing page 2 models: %#v", btns)
+	}
+	if !hasButtonCommand(btns, "/model page 1") || !hasButtonCommand(btns, "/model page 3") {
+		t.Fatalf("expected both prev and next buttons on page 2: %#v", btns)
+	}
+
+	// Page 4: last 3 models including gpt-oss-120b-medium, prev button only.
+	txt, btns = sendCmd("/model page 4")
+	if !strings.Contains(txt, "第 4/4 页，共 27 个") {
+		t.Fatalf("expected page 4 header, got:\n%s", txt)
+	}
+	if !hasButtonCommand(btns, "/model gpt-oss-120b-medium") || !hasButtonCommand(btns, "/model claude-sonnet-5-5-medium") {
+		t.Fatalf("missing page 4 models: %#v", btns)
+	}
+	if !hasButtonCommand(btns, "/model page 3") || hasButtonCommand(btns, "/model page 5") {
+		t.Fatalf("unexpected page 4 navigation buttons: %#v", btns)
+	}
+
+	// Direct model switch works regardless of current page.
+	reply, _ := sendCmd("/model claude-opus-5-5-high")
+	if !strings.Contains(reply, "已切换到 claude-opus-5-5-high") {
+		t.Fatalf("unexpected switch reply: %q", reply)
+	}
+
+	// <= 10 models keep a single page with no pagination row.
+	eng.models = allModels[:10]
+	txt, btns = sendCmd("/model")
+	if strings.Contains(txt, "第 1/") || hasButtonCommand(btns, "/model page 2") {
+		t.Fatalf("did not expect pagination for 10 models: txt=%q btns=%#v", txt, btns)
+	}
+	if len(btns) != 5 || !hasButtonCommand(btns, "/model gemini-4-argon-low") {
+		t.Fatalf("expected all 10 models across 5 rows, got %#v", btns)
 	}
 }
