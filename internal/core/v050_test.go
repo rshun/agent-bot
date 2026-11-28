@@ -352,6 +352,7 @@ func TestModelButtonsPagination(t *testing.T) {
 
 	eng := &manyModelsEngine{fakeEngine: &fakeEngine{}, models: allModels}
 	svc, _ := newMemoryService(t, eng)
+	svc.AllowedUsers[platform.Discord] = map[string]struct{}{"u1": {}}
 	out := &buttonCaptureOut{}
 
 	sendCmd := func(text string) (string, [][]platform.Button) {
