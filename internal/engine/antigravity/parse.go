@@ -20,14 +20,28 @@ type Allowance = engine.Allowance
 var ValidModelName = engine.ValidModelName
 
 var (
-	ansiRE      = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
+	ansiRE      = regexp.MustCompile(`\x1b\[[0-9;?]*[a-zA-Z]`)
 	rePercent   = regexp.MustCompile(`(?i)(\d+(?:\.\d+)?)\s*%`)
 	reResetDate = regexp.MustCompile(`\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2})?`)
 )
 
+func isAntigravityModelSlug(slug string) bool {
+	if !ValidModelName(slug) {
+		return false
+	}
+	// Real Antigravity CLI model slugs are lowercase identifiers containing at least
+	// a hyphen or digit (e.g. "gemini-4-neon-high", "claude-opus-5-5-high", "gpt-oss-120b-medium").
+	// Reject capitalized or plain status words such as "Fetching", "Loading", "Available", "Model".
+	if slug != strings.ToLower(slug) {
+		return false
+	}
+	return strings.Contains(slug, "-") || strings.ContainsAny(slug, "0123456789")
+}
+
 // ParseModels parses `agy models` stdout into a deduplicated ModelList.
 func ParseModels(raw string) ModelList {
 	cleaned := ansiRE.ReplaceAllString(raw, "")
+	cleaned = strings.ReplaceAll(cleaned, "\r", "\n")
 	var (
 		names   []string
 		seen    = make(map[string]bool)
@@ -40,7 +54,14 @@ func ParseModels(raw string) ModelList {
 			continue
 		}
 		lower := strings.ToLower(line)
-		if strings.HasPrefix(lower, "available models") || strings.HasPrefix(lower, "model ") || strings.HasPrefix(line, "---") {
+		if strings.HasPrefix(lower, "available models") ||
+			strings.HasPrefix(lower, "model ") ||
+			strings.HasPrefix(lower, "fetching") ||
+			strings.HasPrefix(lower, "loading") ||
+			strings.HasPrefix(lower, "checking") ||
+			strings.HasPrefix(lower, "connecting") ||
+			strings.HasPrefix(line, "---") ||
+			strings.HasPrefix(line, "===") {
 			continue
 		}
 		isCurrent := strings.HasPrefix(line, "*") || strings.Contains(lower, "(current)")
@@ -51,7 +72,7 @@ func ParseModels(raw string) ModelList {
 			continue
 		}
 		slug := strings.TrimSpace(fields[0])
-		if !ValidModelName(slug) {
+		if !isAntigravityModelSlug(slug) {
 			continue
 		}
 		if !seen[slug] {
